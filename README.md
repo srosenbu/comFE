@@ -1,2 +1,11 @@
 # comFE
-A library for **co**nstitutive **m**odels in **FE**niCSx written in Rust and Python.
+A library for _**co**nstitutive **m**odels in **FE**niCSx_ written in Rust and Python.
+
+## Goals
+
+* My side project which should a similar functionality as https://github.com/BAMresearch/fenics-constitutive. (BUT IN RUST)
+* Currently this repo just reserves the name on github (naming stuff is hard)
+
+## Rstrictions
+
+* This is my personal Rust-Learning project, therefore don't expect anything groundbreaking.
