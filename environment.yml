@@ -1,0 +1,11 @@
+name: comfe
+channels:
+  - conda-forge
+dependencies:
+  - rust
+  - maturin
+  - pytest
+  - conda-ecosystem-user-package-isolation
+  - pip
+  - pip:
+      - -e .
