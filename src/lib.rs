@@ -8,25 +8,25 @@ struct LinearElastic3D{
 
 
 trait SmallStrainModel{
-    fn evaluate_ip(&self, ip: usize, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>);
-    fn evaluate(&self, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>){
+    fn evaluate_ip(&self, ip: usize, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>, tangent: &mut DVectorViewMut<f64>);
+    fn evaluate(&self, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>, tangent: &mut DVectorViewMut<f64>){
         assert_eq!(stress.nrows(), del_strain.nrows());
         let n: usize = stress.nrows()/6;
         assert_eq!(stress.nrows(), n*6);
         for ip in 0..n{
-            println!("ip: {}", ip);
-            self.evaluate_ip(ip, del_t, stress, del_strain);
+            self.evaluate_ip(ip, del_t, stress, del_strain, tangent);
         }
     }
 }
 
 /// implement the small strain model for linear elastic material
 impl SmallStrainModel for LinearElastic3D{
-    fn evaluate_ip(&self, ip: usize, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>){
-        println!("shape: {} {}", stress.nrows(), stress.ncols());
+    fn evaluate_ip(&self, ip: usize, del_t:f64, stress: &mut DVectorViewMut<f64>, del_strain: &DVectorView<f64>, tangent: &mut DVectorViewMut<f64>){
         let mut view_stress = stress.fixed_view_mut::<6, 1>(ip*6,0);
+        let mut view_tangent = tangent.fixed_view_mut::<36, 1>(ip*36,0);
         let view_strain = del_strain.fixed_view::<6, 1>(ip*6,0);
         view_stress += self.D * view_strain;
+        view_tangent.copy_from_slice(&self.D.as_slice());
     }
 }
 /// Wrapper struct for LinearElastic3D in python
@@ -35,14 +35,13 @@ struct PyLinearElastic3D{
     model: LinearElastic3D,
 }
 trait PySmallStrainModel{
-    fn evaluate(&self, del_t:f64, stress: PyReadwriteArray1<f64>, del_strain: PyReadonlyArray1<f64>);
+    fn evaluate(&self, del_t:f64, stress: PyReadwriteArray1<f64>, del_strain: PyReadonlyArray1<f64>, tangent: PyReadwriteArray1<f64>)->PyResult<()>;
 }
 
 #[pymethods] 
 impl  PyLinearElastic3D{
     #[new]
     fn new(E: f64, nu: f64)->Self{
-        println!("E: {}, nu: {}", E, nu);
         let mut D = SMatrix::<f64, 6, 6>::zeros();
         let c1 = E/(1.0+nu)/(1.0-2.0*nu);
         let c2 = c1*(1.0-nu);
@@ -65,10 +64,11 @@ impl  PyLinearElastic3D{
         }
     }
 
-    fn evaluate(&self, del_t:f64, stress: PyReadwriteArray1<f64>, del_strain: PyReadonlyArray1<f64>)->PyResult<()>{
+    fn evaluate(&self, del_t:f64, stress: PyReadwriteArray1<f64>, del_strain: PyReadonlyArray1<f64>, tangent: PyReadwriteArray1<f64>)->PyResult<()>{
         let mut stress = stress.try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+        let mut tangent = tangent.try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
         let del_strain = del_strain.try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-        self.model.evaluate(del_t, &mut stress, &del_strain);
+        self.model.evaluate(del_t, &mut stress, &del_strain, &mut tangent);
         Ok(())
     }
 }
