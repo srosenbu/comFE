@@ -14,3 +14,8 @@ print(stress)
 model.evaluate_some(0.5, stress, strain, tangents, ips)
 print(np.linalg.norm(tangents[:100*36]), np.linalg.norm(tangents[100*36:]))
 # model.evaluate(0.5, stress, stress, tangents)
+
+model2=comfe.py_new_linear_elastic_3d({"E":42.,"nu": 0.3})
+
+model2.evaluate(0.5, stress, strain, tangents)
+print(model2)

@@ -50,11 +50,6 @@ trait SmallStrainModel {
     }
 }
 
-/// Wrapper struct for LinearElastic3D in python
-#[pyclass(unsendable)]
-struct PySmallStrainModel {
-    model: Box<dyn SmallStrainModel>,
-}
 /// implement the small strain model for linear elastic material
 impl SmallStrainModel for LinearElastic3D {
 
@@ -91,47 +86,72 @@ impl LinearElastic3D {
         Self { D: D }
     }
 }
+
+/// Wrapper struct for LinearElastic3D in python
+#[pyclass(unsendable)]
+struct PySmallStrainModel {
+    model: Box<dyn SmallStrainModel>,
+}
+
+#[pymethods]
 impl PySmallStrainModel {
-    fn new(parameters: &PyDict) -> Self{
-        let mut parameters_map = HashMap::new();
-        for (key, value) in parameters.iter() {
-            let key = key.extract::<String>().unwrap();
-            let value = value.extract::<f64>().unwrap();
-            parameters_map.insert(key, value);
-        }
-        Self { model: ::new(&parameters_map) }
-    }
     fn evaluate(
         &self,
         del_t: f64,
-        stress: &mut PyReadwriteArray1<f64>,
-        del_strain: &PyReadonlyArray1<f64>,
-        tangent: &mut PyReadwriteArray1<f64>,
-    ) {
-        assert_eq!(stress.len(), del_strain.len());
-        let n: usize = stress.len() / 6;
-        assert_eq!(stress.len(), n * 6);
-        for ip in 0..n {
-            self.model.evaluate_ip(ip, del_t, stress, del_strain, tangent);
-        }
+        stress: PyReadwriteArray1<f64>,
+        del_strain: PyReadonlyArray1<f64>,
+        tangent: PyReadwriteArray1<f64>,
+    ) -> PyResult<()> {
+        let mut stress = stress
+            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        let mut tangent = tangent
+            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        let del_strain = del_strain
+            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        self.model
+            .evaluate(del_t, &mut stress, &del_strain, &mut tangent);
+        Ok(())
     }
     fn evaluate_some(
         &self,
         del_t: f64,
-        stress: &mut PyReadwriteArray1<f64>,
-        del_strain: &PyReadonlyArray1<f64>,
-        tangent: &mut PyReadwriteArray1<f64>,
-        ips: &[usize],
-    ) {
-        assert_eq!(stress.len(), del_strain.len());
-        let n: usize = stress.len() / 6;
-        assert_eq!(stress.len(), n * 6);
-        for ip in ips {
-            self.model.evaluate_ip(*ip, del_t, stress, del_strain, tangent);
-        }
+        stress: PyReadwriteArray1<f64>,
+        del_strain: PyReadonlyArray1<f64>,
+        tangent: PyReadwriteArray1<f64>,
+        ips: PyReadonlyArray1<usize>,
+    ) -> PyResult<()> {
+        let mut stress = stress
+            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        let mut tangent = tangent
+            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        let del_strain = del_strain
+            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+            .unwrap();
+        let ips = ips.as_slice().unwrap();
+        self.model.evaluate_some(
+            del_t,
+            &mut stress,
+            &del_strain,
+            &mut tangent,
+            ips,
+        );
+        Ok(())
     }
 }
 
+#[pyfunction]
+fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PySmallStrainModel> {
+    let parameters = parameters.extract::<HashMap<String, f64>>().unwrap();
+    let model = LinearElastic3D::new(&parameters);
+    Ok(PySmallStrainModel {
+        model: Box::new(model),
+    })
+}
 #[pyclass]
 struct PyLinearElastic3D {
     model: LinearElastic3D,
@@ -222,5 +242,7 @@ fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum_as_string, m)?)?;
     m.add_class::<PyLinearElastic3D>()?;
+    m.add_class::<PySmallStrainModel>()?;
+    m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
     Ok(())
 }
