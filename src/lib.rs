@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
@@ -8,6 +10,7 @@ struct LinearElastic3D {
 }
 
 trait SmallStrainModel {
+    //fn new(parameters: &HashMap<String, f64>) -> Self;
     fn evaluate_ip(
         &self,
         ip: usize,
@@ -47,8 +50,14 @@ trait SmallStrainModel {
     }
 }
 
+/// Wrapper struct for LinearElastic3D in python
+#[pyclass(unsendable)]
+struct PySmallStrainModel {
+    model: Box<dyn SmallStrainModel>,
+}
 /// implement the small strain model for linear elastic material
 impl SmallStrainModel for LinearElastic3D {
+
     fn evaluate_ip(
         &self,
         ip: usize,
@@ -64,28 +73,68 @@ impl SmallStrainModel for LinearElastic3D {
         view_tangent.copy_from_slice(&self.D.as_slice());
     }
 }
-/// Wrapper struct for LinearElastic3D in python
-#[pyclass]
-struct PyLinearElastic3D {
-    model: LinearElastic3D,
+impl LinearElastic3D {
+    fn new(parameters: &HashMap<String, f64>) -> Self{
+        //let mut D = SMatrix::<f64, 6, 6>::zeros();
+        let E = parameters.get("E").unwrap();
+        let nu = parameters.get("nu").unwrap();
+        let mu = E / (2.0 * (1.0 + nu));
+        let lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+        let D = SMatrix::<f64, 6, 6>::new(
+            lambda + 2.0 * mu, lambda, lambda, 0.0, 0.0, 0.0,
+            lambda, lambda + 2.0 * mu, lambda, 0.0, 0.0, 0.0,
+            lambda, lambda, lambda + 2.0 * mu, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 2.0 * mu, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 2.0 * mu, 0.0,
+            0.0,0.0,0.0,0.0,0.0, 2.0 * mu,
+        );
+        Self { D: D }
+    }
 }
-trait PySmallStrainModel {
-    fn new(parameters:&PyDict) -> Self;
+impl PySmallStrainModel {
+    fn new(parameters: &PyDict) -> Self{
+        let mut parameters_map = HashMap::new();
+        for (key, value) in parameters.iter() {
+            let key = key.extract::<String>().unwrap();
+            let value = value.extract::<f64>().unwrap();
+            parameters_map.insert(key, value);
+        }
+        Self { model: ::new(&parameters_map) }
+    }
     fn evaluate(
         &self,
         del_t: f64,
-        stress: PyReadwriteArray1<f64>,
-        del_strain: PyReadonlyArray1<f64>,
-        tangent: PyReadwriteArray1<f64>,
-    ) -> PyResult<()>;
+        stress: &mut PyReadwriteArray1<f64>,
+        del_strain: &PyReadonlyArray1<f64>,
+        tangent: &mut PyReadwriteArray1<f64>,
+    ) {
+        assert_eq!(stress.len(), del_strain.len());
+        let n: usize = stress.len() / 6;
+        assert_eq!(stress.len(), n * 6);
+        for ip in 0..n {
+            self.model.evaluate_ip(ip, del_t, stress, del_strain, tangent);
+        }
+    }
     fn evaluate_some(
         &self,
         del_t: f64,
-        stress: PyReadwriteArray1<f64>,
-        del_strain: PyReadonlyArray1<f64>,
-        tangent: PyReadwriteArray1<f64>,
-        ips: PyReadonlyArray1<usize>,
-    ) -> PyResult<()>;
+        stress: &mut PyReadwriteArray1<f64>,
+        del_strain: &PyReadonlyArray1<f64>,
+        tangent: &mut PyReadwriteArray1<f64>,
+        ips: &[usize],
+    ) {
+        assert_eq!(stress.len(), del_strain.len());
+        let n: usize = stress.len() / 6;
+        assert_eq!(stress.len(), n * 6);
+        for ip in ips {
+            self.model.evaluate_ip(*ip, del_t, stress, del_strain, tangent);
+        }
+    }
+}
+
+#[pyclass]
+struct PyLinearElastic3D {
+    model: LinearElastic3D,
 }
 
 #[pymethods]
