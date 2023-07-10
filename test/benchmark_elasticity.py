@@ -43,13 +43,16 @@ class TTimer:
         ms = (time.perf_counter() - self.start) * 1000
         self.timings.append(ms)
 timer_rust=TTimer("very fast rust model")
+timer_rust_box=TTimer("very fast rust model with Box<>")
 timer_indices=TTimer("rust model with indices")
 for n in sizes:
     rust_law = comfe.PyLinearElastic3D({"E":E,"nu":nu})
+    rust_law_box = comfe.py_new_linear_elastic_3d({"E":E,"nu":nu})
     rust_law_indices = comfe.PyLinearElastic3D({"E":E,"nu":nu})
     eps = np.random.random(6*n)
 
     sigma_rust = np.zeros(6*n)
+    sigma_rust_box = np.zeros(6*n)
     sigma_indices = np.zeros(6*n)
     if n >= 4:
         # we assume that there are always at least 4 quadrature points
@@ -66,14 +69,18 @@ for n in sizes:
     for j in range(n_timings):
         with timer_rust:
             rust_law.evaluate(0.5, sigma_rust, eps, Ct)
+        with timer_rust_box:
+            rust_law_box.evaluate(0.5, sigma_rust_box, eps, Ct)
         with timer_indices:
             rust_law_indices.evaluate_some(0.5, sigma_indices, eps, Ct, indices)
 
-    del sigma_rust, sigma_indices, Ct, eps
+    del sigma_rust, sigma_rust_box, sigma_indices, Ct, eps
 
 mean_rust = np.mean(np.array(timer_rust.timings).reshape(-1,n_timings), axis=1)
+mean_rust_box = np.mean(np.array(timer_rust_box.timings).reshape(-1,n_timings), axis=1)
 mean_indices = np.mean(np.array(timer_indices.timings).reshape(-1,n_timings), axis=1)
 plt.plot(sizes, mean_rust, label="very fast rust model")
+plt.plot(sizes, mean_rust_box, label="very fast rust model with Box<>")
 plt.plot(sizes, mean_indices, label="rust model with indices")
 
 plt.legend()
