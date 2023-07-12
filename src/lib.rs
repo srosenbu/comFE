@@ -6,9 +6,15 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use crate::smallstrain::SmallStrainModel;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
-use crate::interfaces::QValues;
+use crate::interfaces::{QValues,ConstitutiveModel};
 pub mod smallstrain;
 pub mod interfaces;
+
+#[pyclass(unsendable)]
+struct PyConstitutiveModel {
+    model: Box<dyn ConstitutiveModel>,
+}
+
 
 
 /// Wrapper struct for LinearElastic3D in python
@@ -68,11 +74,19 @@ impl PySmallStrainModel {
     }
 }
 
+// #[pyfunction]
+// fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PySmallStrainModel> {
+//     let parameters = parameters.extract::<HashMap<String, f64>>().unwrap();
+//     let model = LinearElastic3D::new(&parameters);
+//     Ok(PySmallStrainModel {
+//         model: Box::new(model),
+//     })
+// }
 #[pyfunction]
-fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PySmallStrainModel> {
+fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PyConstitutiveModel> {
     let parameters = parameters.extract::<HashMap<String, f64>>().unwrap();
     let model = LinearElastic3D::new(&parameters);
-    Ok(PySmallStrainModel {
+    Ok(PyConstitutiveModel {
         model: Box::new(model),
     })
 }
@@ -162,31 +176,34 @@ fn dict_input(input: HashMap<String,PyReadwriteArray1<f64>>) -> PyResult<()>{
     Ok(())
 }
 
-#[pyfunction]
-fn q_values_from_py(input: HashMap<String, PyReadonlyArray1<f64>>) -> PyResult<()> {
-    let strain = input.get("strain").expect("Strain not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>();
-    let stress = input.get("stress").expect("Stress not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>();
-    let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>();
-    let q_values = QValues::<DVectorView::<f64>> {
-        mandel_strain: strain,
-        mandel_stress: stress,
-        mandel_tangent: tangent,
-    };
-    println!("{:?}", q_values);
+// #[pyfunction]
+// fn q_values_from_py(input: HashMap<String, PyReadonlyArray1<f64>>) -> PyResult<()> {
+//     let strain = input.get("strain").expect("Strain not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+//     let stress = input.get("stress").expect("Stress not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+//     let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+//     let q_values = QValues::<DVectorView::<f64>> {
+//         mandel_strain: Some(&strain),
+//         mandel_stress: Some(&stress),
+//         mandel_tangent: Some(&tangent),
+//     };
+//     println!("{:?}", q_values);
 
-    Ok(())
-}
+//     Ok(())
+// }
+
 #[pyfunction]
 fn q_values_mut_from_py(input: HashMap<String, PyReadwriteArray1<f64>>) -> PyResult<()> {
-    let strain = input.get("strain").expect("Strain not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>();
-    let stress = input.get("stress").expect("Stress not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>();
-    let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>();
+    let strain = input.get("strain").expect("Strain not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+    let stress = input.get("stress").expect("Stress not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
+    let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
     let q_values = QValues::<DVectorViewMut::<f64>> {
-        mandel_strain: strain,
-        mandel_stress: stress,
-        mandel_tangent: tangent,
+        mandel_strain: Some(&strain),
+        mandel_stress: Some(&stress),
+        mandel_tangent: Some(&tangent),
+        ..Default::default()
     };
-    println!("{:?}", q_values);
+    
+    println!("{:?}", &q_values);
 
     Ok(())
 }
@@ -197,7 +214,7 @@ fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PySmallStrainModel>()?;
     m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
     m.add_function(wrap_pyfunction!(dict_input,m)?)?;
-    m.add_function(wrap_pyfunction!(q_values_from_py,m)?)?;
+    //m.add_function(wrap_pyfunction!(q_values_from_py,m)?)?;
     m.add_function(wrap_pyfunction!(q_values_mut_from_py,m)?)?;
     Ok(())
 }
