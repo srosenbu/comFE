@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
-use strum_macros::{EnumIter,EnumString};
+//use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, EnumString, ToString};
 
-use nalgebra::{DVectorView, DVectorViewMut, SMatrixView, Const, Matrix, ViewStorage, Dyn, ViewStorageMut, SVector};
+use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, Matrix, SVector, ViewStorage};
 // A struct that contains an attribute for each possible quadrature value
 // which is by default set to None.
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct QValues<'a, T: 'a> {
     pub mandel_tangent: &'a Option<T>,
     pub nonlocal_strain: &'a Option<T>,
 }
-#[derive(Debug, EnumIter, Hash, PartialEq, Eq, EnumString)]
+#[derive(Debug, EnumIter, Hash, PartialEq, Eq, EnumString, ToString)]
 pub enum Q {
     #[strum(serialize = "MandelStress", serialize = "mandel_stress")]
     MandelStress,
@@ -26,55 +26,60 @@ pub enum Q {
     #[strum(serialize = "LAST", serialize = "last")]
     LAST,
 }
-impl Q {
-    pub fn to_string(&self) -> String {
-        match &self {
-            Q::MandelStress => "MandelStress".to_string(),
-            Q::MandelStrain => "MandelStrain".to_string(),
-            Q::MandelTangent => "MandelTangent".to_string(),
-            Q::NonlocalStrain => "NonlocalStrain".to_string(),
-            Q::LAST => "LAST".to_string(),
-        }
-    }
-}
+#[derive(Debug)]
 pub struct QValueInput<'a> {
     pub data: [Option<DVectorView<'a, f64>>; Q::LAST as usize],
 }
+#[derive(Debug)]
 pub struct QValueOutput<'a> {
     pub data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
 }
 impl QValueInput<'_> {
-    pub fn get_data(&self, q: Q) -> &DVectorView<f64>{
+    pub fn get_data(&self, q: Q) -> &DVectorView<f64> {
         self.data[q as usize].as_ref().unwrap()
     }
-    pub fn get_scalar(&self, q: Q, i:usize) -> f64 {
+    pub fn get_scalar(&self, q: Q, i: usize) -> f64 {
         self.data[q as usize].unwrap()[(i)]
     }
-    pub fn get_vector<const SIZE: usize>(&self, q: Q, i:usize) -> Matrix<f64, Const<SIZE>, Const<1>, ViewStorage<'_, f64, Const<SIZE>, Const<1>, Const<1>, Dyn>>{
-        self.data[q as usize].as_ref().unwrap().fixed_view::<SIZE,1>(i*SIZE, 0)
+    pub fn get_vector<const SIZE: usize>(
+        &self,
+        q: Q,
+        i: usize,
+    ) -> Matrix<
+        f64,
+        Const<SIZE>,
+        Const<1>,
+        ViewStorage<'_, f64, Const<SIZE>, Const<1>, Const<1>, Dyn>,
+    > {
+        self.data[q as usize]
+            .as_ref()
+            .unwrap()
+            .fixed_view::<SIZE, 1>(i * SIZE, 0)
     }
-    pub fn get_slice<const SIZE: usize>(&self, q: Q, i:usize) -> &[f64]{
-        self.data[q as usize].as_ref().unwrap().as_slice()[i*SIZE..(i+1)*SIZE].as_ref()
+    pub fn get_slice<const SIZE: usize>(&self, q: Q, i: usize) -> &[f64] {
+        self.data[q as usize].as_ref().unwrap().as_slice()[i * SIZE..(i + 1) * SIZE].as_ref()
     }
 }
 impl QValueOutput<'_> {
-    //pub fn get_scalar(&self, q: Q, i:usize) -> f64 {
-    //    self.data[q as usize].as_ref().unwrap()[(i)]
-    //}
-    //pub fn get_vector<const SIZE: usize>(&mut self, q: Q, i:usize) -> Matrix<f64, Const<SIZE>, Const<1>, ViewStorageMut<'_, f64, Const<SIZE>, Const<1>, Const<1>, Dyn>>{
-    //    self.data[q as usize].as_mut().unwrap().fixed_view_mut::<SIZE,1>(i*SIZE, 0)
-    //}
-    pub fn get_data(&mut self, q: Q) -> &DVectorViewMut<f64>{
+    pub fn get_data(&mut self, q: Q) -> &DVectorViewMut<f64> {
         self.data[q as usize].as_mut().unwrap()
     }
-    pub fn set_scalar(&mut self, q: Q, i:usize, value: f64) {
+    pub fn set_scalar(&mut self, q: Q, i: usize, value: f64) {
         self.data[q as usize].as_mut().unwrap()[(i)] = value;
     }
-    pub fn set_vector<const SIZE: usize>(&mut self, q: Q, i:usize, value: SVector<f64, SIZE>) {
-        self.data[q as usize].as_mut().unwrap().fixed_view_mut::<SIZE,1>(i*SIZE, 0).copy_from(&value);
+    pub fn set_vector<const SIZE: usize>(&mut self, q: Q, i: usize, value: SVector<f64, SIZE>) {
+        self.data[q as usize]
+            .as_mut()
+            .unwrap()
+            .fixed_view_mut::<SIZE, 1>(i * SIZE, 0)
+            .copy_from(&value);
     }
-    pub fn set_slice<const SIZE: usize>(&mut self, q: Q, i:usize, value: &[f64]) {
-        self.data[q as usize].as_mut().unwrap().fixed_view_mut::<SIZE,1>(i*SIZE, 0).copy_from_slice(value);
+    pub fn set_slice<const SIZE: usize>(&mut self, q: Q, i: usize, value: &[f64]) {
+        self.data[q as usize]
+            .as_mut()
+            .unwrap()
+            .fixed_view_mut::<SIZE, 1>(i * SIZE, 0)
+            .copy_from_slice(value);
     }
 }
 
@@ -85,18 +90,13 @@ pub enum QDim {
 }
 
 impl QDim {
-    pub fn size(&self)-> usize{
+    pub fn size(&self) -> usize {
         match self {
             QDim::Scalar => 1,
             QDim::Vector(n) => *n,
             QDim::Tensor(m, n) => *m * *n,
         }
-    } 
-}
-
-struct QValue<T> {
-    dim: QDim,
-    value: T,
+    }
 }
 
 impl<'a, T> Default for QValues<'a, T> {
@@ -115,20 +115,9 @@ pub trait ConstitutiveModel {
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed
     fn define_output(&self) -> HashMap<Q, QDim>;
-    
-    fn evaluate_ip(
-        &self,
-        ip: usize,
-        del_t: f64,
-        input: &QValueInput,
-        output: &mut QValueOutput,
-    );
-    fn evaluate(
-        &self,
-        del_t: f64,
-        input: &QValueInput,
-        output: &mut QValueOutput,
-    ) {
+
+    fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput);
+    fn evaluate(&self, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let n = self.check_size_and_return(input, output).expect("");
         for i in 0..n {
             self.evaluate_ip(i, del_t, input, output);
@@ -146,7 +135,11 @@ pub trait ConstitutiveModel {
             self.evaluate_ip(*i, del_t, input, output);
         }
     }
-    fn check_size_and_return(&self, input: &QValueInput, output: &mut QValueOutput)-> Result<usize, &str> {
+    fn check_size_and_return(
+        &self,
+        input: &QValueInput,
+        output: &mut QValueOutput,
+    ) -> Result<usize, &str> {
         let input_def = self.define_input();
         let output_def = self.define_output();
         let mut sizes = Vec::<usize>::new();
@@ -162,8 +155,5 @@ pub trait ConstitutiveModel {
         } else {
             return Err("There are inconsistencies in input and output sizes.");
         }
-        
     }
 }
-
-
