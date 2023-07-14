@@ -1,100 +1,138 @@
 use std::collections::HashMap;
 
+use crate::interfaces::{ConstitutiveModel, QValues, Q, QDim, QValueInput, QValueOutput};
+use crate::smallstrain::linear_elastic::LinearElastic3D;
+//use crate::smallstrain::SmallStrainModel;
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
 use numpy::{PyArray2, PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use crate::smallstrain::SmallStrainModel;
-use crate::smallstrain::linear_elastic::LinearElastic3D;
-use crate::interfaces::{QValues,ConstitutiveModel};
-pub mod smallstrain;
+
+use std::str::FromStr;
 pub mod interfaces;
+pub mod smallstrain;
 
 #[pyclass(unsendable)]
 struct PyConstitutiveModel {
     model: Box<dyn ConstitutiveModel>,
 }
 
-
-
-/// Wrapper struct for LinearElastic3D in python
-#[pyclass(unsendable)]
-struct PySmallStrainModel {
-    model: Box<dyn SmallStrainModel>,
-}
-
 #[pymethods]
-impl PySmallStrainModel {
+impl PyConstitutiveModel{
     fn evaluate(
         &self,
         del_t: f64,
-        stress: PyReadwriteArray1<f64>,
-        del_strain: PyReadonlyArray1<f64>,
-        tangent: PyReadwriteArray1<f64>,
-    ) -> PyResult<()> {
-        let mut stress = stress
-            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        let mut tangent = tangent
-            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        let del_strain = del_strain
-            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        self.model
-            .evaluate(del_t, &mut stress, &del_strain, &mut tangent);
+        input: HashMap<String, PyReadonlyArray1<f64>>,
+        output: HashMap<String, PyReadwriteArray1<f64>>,
+    ) -> PyResult<()>{
+        let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] = std::array::from_fn(|_| None);
+        
+        let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] = std::array::from_fn(|_| None);
+        //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
+        
+        for (key, value) in input.iter() {
+            let q = Q::from_str(key).expect("Name unknown");
+            input_data[q as usize] = Some(value.try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap());
+        }
+        for (key, value) in output.iter() {
+            let q = Q::from_str(key).expect("Name unknown");
+            output_data[q as usize] = Some(value.try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap());
+        }
+        let q_input = QValueInput{data: input_data};
+        let mut q_output = QValueOutput{data: output_data};
+        self.model.evaluate(del_t, &q_input, &mut q_output);
         Ok(())
     }
     fn evaluate_some(
         &self,
         del_t: f64,
-        stress: PyReadwriteArray1<f64>,
-        del_strain: PyReadonlyArray1<f64>,
-        tangent: PyReadwriteArray1<f64>,
+        input: HashMap<String, PyReadonlyArray1<f64>>,
+        output: HashMap<String, PyReadwriteArray1<f64>>,
         ips: PyReadonlyArray1<usize>,
-    ) -> PyResult<()> {
-        let mut stress = stress
-            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        let mut tangent = tangent
-            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        let del_strain = del_strain
-            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
-            .unwrap();
-        let ips = ips.as_slice().unwrap();
-        self.model.evaluate_some(
-            del_t,
-            &mut stress,
-            &del_strain,
-            &mut tangent,
-            ips,
-        );
+    ) -> PyResult<()>{
+        let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] = std::array::from_fn(|_| None);
+        
+        let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] = std::array::from_fn(|_| None);
+        //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
+        
+        for (key, value) in input.iter() {
+            let q = Q::from_str(key).expect("Name unknown");
+            input_data[q as usize] = Some(value.try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap());
+        }
+        for (key, value) in output.iter() {
+            let q = Q::from_str(key).expect("Name unknown");
+            output_data[q as usize] = Some(value.try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap());
+        }
+
+        let q_input = QValueInput{data: input_data};
+        let mut q_output = QValueOutput{data: output_data};
+
+        self.model.evaluate_some(del_t, &q_input, &mut q_output, ips.as_slice().unwrap());
         Ok(())
+
     }
+    fn define_input(&self, py: Python) -> PyResult<PyObject>{
+        let input_py = PyDict::new(py);
+        let input_rs = self.model.define_input();
+        for (key, value) in input_rs.iter() {
+            match value {
+                QDim::Scalar => {
+                    input_py.set_item(key.to_string(), 1)?;
+                },
+                QDim::Vector(n) => {
+                    input_py.set_item(key.to_string(), n)?;
+                },
+                QDim::Tensor(n, m) => {
+                    input_py.set_item(key.to_string(), (n,m))?;
+                },
+            }
+        }
+        Ok(input_py.into())
+        
+    }
+    fn define_output(&self, py: Python) -> PyResult<PyObject>{
+        let output_py = PyDict::new(py);
+        let output_rs = self.model.define_output();
+        for (key, value) in output_rs.iter() {
+            match value {
+                QDim::Scalar => {
+                    output_py.set_item(key.to_string(), 1)?;
+                },
+                QDim::Vector(n) => {
+                    output_py.set_item(key.to_string(), n)?;
+                },
+                QDim::Tensor(n, m) => {
+                    output_py.set_item(key.to_string(), (n,m))?;
+                },
+            }
+        }
+        Ok(output_py.into())
+        
+    }
+    
 }
 
-// #[pyfunction]
-// fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PySmallStrainModel> {
-//     let parameters = parameters.extract::<HashMap<String, f64>>().unwrap();
-//     let model = LinearElastic3D::new(&parameters);
-//     Ok(PySmallStrainModel {
-//         model: Box::new(model),
-//     })
-// }
-#[pyfunction]
-fn py_new_linear_elastic_3d(parameters: &PyDict) -> PyResult<PyConstitutiveModel> {
-    let parameters = parameters.extract::<HashMap<String, f64>>().unwrap();
-    let model = LinearElastic3D::new(&parameters);
-    Ok(PyConstitutiveModel {
-        model: Box::new(model),
-    })
-}
+
 #[pyclass]
 struct PyLinearElastic3D {
-    model: LinearElastic3D,
+    D: SMatrix<f64, 6, 6>,
 }
-
+impl PyLinearElastic3D{
+    fn evaluate_ip(
+        &self,
+        ip: usize,
+        del_t: f64,
+        stress: &mut DVectorViewMut<f64>,
+        del_strain: &DVectorView<f64>,
+        tangent: &mut DVectorViewMut<f64>,
+    ) {
+        let mut view_stress = stress.fixed_view_mut::<6, 1>(ip * 6, 0);
+        let mut view_tangent = tangent.fixed_view_mut::<36, 1>(ip * 36, 0);
+        let view_strain = del_strain.fixed_view::<6, 1>(ip * 6, 0);
+        view_stress += self.D * view_strain;
+        view_tangent.copy_from_slice(&self.D.as_slice());
+    }
+}
 #[pymethods]
 impl PyLinearElastic3D {
     #[new]
@@ -116,10 +154,9 @@ impl PyLinearElastic3D {
         D[(3, 3)] = c1;
         D[(4, 4)] = c1;
         D[(5, 5)] = c1;
-        Self {
-            model: LinearElastic3D { D: D },
-        }
+        Self { D: D }
     }
+    
 
     fn evaluate(
         &self,
@@ -137,8 +174,11 @@ impl PyLinearElastic3D {
         let del_strain = del_strain
             .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
             .unwrap();
-        self.model
-            .evaluate(del_t, &mut stress, &del_strain, &mut tangent);
+
+        for ip in 0..stress.nrows() / 6 {
+            self.evaluate_ip(ip, del_t, &mut stress, &del_strain, &mut tangent)
+        }
+
         Ok(())
     }
     fn evaluate_some(
@@ -159,62 +199,58 @@ impl PyLinearElastic3D {
             .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
             .unwrap();
         let ips = ips.as_slice().unwrap();
-        self.model.evaluate_some(
-            del_t,
-            &mut stress,
-            &del_strain,
-            &mut tangent,
-            ips,
-        );
+        for ip in ips {
+            self.evaluate_ip(*ip, del_t, &mut stress, &del_strain, &mut tangent)
+        }
         Ok(())
     }
 }
-#[pyfunction]
-fn dict_input(input: HashMap<String,PyReadwriteArray1<f64>>) -> PyResult<()>{
-    let mut strain = input.get("strain").expect("Strain not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-    strain[0] = 42.;
-    Ok(())
-}
 
 // #[pyfunction]
-// fn q_values_from_py(input: HashMap<String, PyReadonlyArray1<f64>>) -> PyResult<()> {
-//     let strain = input.get("strain").expect("Strain not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-//     let stress = input.get("stress").expect("Stress not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-//     let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-//     let q_values = QValues::<DVectorView::<f64>> {
-//         mandel_strain: Some(&strain),
-//         mandel_stress: Some(&stress),
-//         mandel_tangent: Some(&tangent),
+// fn q_values_mut_from_py(input: HashMap<String, PyReadwriteArray1<f64>>) -> PyResult<()> {
+//     let strain = input
+//         .get("strain")
+//         .expect("Strain not defined")
+//         .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+//         .unwrap();
+//     let stress = input
+//         .get("stress")
+//         .expect("Stress not defined")
+//         .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+//         .unwrap();
+//     let tangent = input
+//         .get("tangent")
+//         .expect("Tangent not defined")
+//         .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+//         .unwrap();
+//     let q_values = QValues::<DVectorViewMut<f64>> {
+//         mandel_strain: &Some(strain),
+//         mandel_stress: &Some(stress),
+//         mandel_tangent: &Some(tangent),
+//         ..Default::default()
 //     };
-//     println!("{:?}", q_values);
+
+//     println!("{:?}", &q_values);
 
 //     Ok(())
 // }
-
-#[pyfunction]
-fn q_values_mut_from_py(input: HashMap<String, PyReadwriteArray1<f64>>) -> PyResult<()> {
-    let strain = input.get("strain").expect("Strain not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-    let stress = input.get("stress").expect("Stress not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-    let tangent = input.get("tangent").expect("Tangent not defined").try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>().unwrap();
-    let q_values = QValues::<DVectorViewMut::<f64>> {
-        mandel_strain: Some(&strain),
-        mandel_stress: Some(&stress),
-        mandel_tangent: Some(&tangent),
-        ..Default::default()
-    };
-    
-    println!("{:?}", &q_values);
-
-    Ok(())
-}
 /// A Python module implemented in Rust.
+#[pyfunction]
+fn py_new_linear_elastic_3d(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
+    let linear_elastic = LinearElastic3D::new(&parameters);
+    Ok(PyConstitutiveModel {
+        model: Box::new(linear_elastic),
+    })
+    
+}
+
 #[pymodule]
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
-    m.add_class::<PySmallStrainModel>()?;
+    //m.add_class::<PySmallStrainModel>()?;
     m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
-    m.add_function(wrap_pyfunction!(dict_input,m)?)?;
+    //m.add_function(wrap_pyfunction!(dict_input, m)?)?;
     //m.add_function(wrap_pyfunction!(q_values_from_py,m)?)?;
-    m.add_function(wrap_pyfunction!(q_values_mut_from_py,m)?)?;
+    //m.add_function(wrap_pyfunction!(q_values_mut_from_py, m)?)?;
     Ok(())
 }

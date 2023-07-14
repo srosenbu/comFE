@@ -65,12 +65,14 @@ for n in sizes:
         indices = np.arange(n, dtype=np.uint64)
  
     Ct = np.zeros(36*n)
-
+    input = {"mandel_strain": eps}
+    output = {"mandel_stress": sigma_rust_box, "mandel_tangent": Ct}
+    #print(rust_law_box.define_input(), rust_law_box.define_output())
     for j in range(n_timings):
+        with timer_rust_box:
+            rust_law_box.evaluate(0.5, input, output)
         with timer_rust:
             rust_law.evaluate(0.5, sigma_rust, eps, Ct)
-        with timer_rust_box:
-            rust_law_box.evaluate(0.5, sigma_rust_box, eps, Ct)
         with timer_indices:
             rust_law_indices.evaluate_some(0.5, sigma_indices, eps, Ct, indices)
 
