@@ -21,27 +21,40 @@ pub enum Q {
     MandelStrain,
     #[strum(serialize = "MandelTangent", serialize = "mandel_tangent")]
     MandelTangent,
+    #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
+    VelocityGradient,
     #[strum(serialize = "NonlocalStrain", serialize = "nonlocal_strain")]
     NonlocalStrain,
+    #[strum(serialize = "Lambda", serialize = "lambda")]
+    Lambda,
+    #[strum(serialize =  "Density", serialize = "density")]
+    Density,
+    #[strum(serialize = "Pressure", serialize = "pressure")]
+    Pressure,
+    #[strum(serialize = "Damage", serialize = "damage")]
+    Damage,
     #[strum(serialize = "LAST", serialize = "last")]
     LAST,
 }
 #[derive(Debug)]
 pub struct QValueInput<'a> {
-    pub data: [Option<DVectorView<'a, f64>>; Q::LAST as usize],
+    data: [Option<DVectorView<'a, f64>>; Q::LAST as usize],
 }
 #[derive(Debug)]
 pub struct QValueOutput<'a> {
-    pub data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
+    data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
 }
-impl QValueInput<'_> {
+impl<'a> QValueInput<'a> {
+    pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::LAST as usize]) -> Self{
+        Self { data: data }
+    }
     pub fn get_data(&self, q: Q) -> &DVectorView<f64> {
         self.data[q as usize].as_ref().unwrap()
     }
     pub fn get_scalar(&self, q: Q, i: usize) -> f64 {
-        self.data[q as usize].unwrap()[(i)]
+        self.data[q as usize].unwrap()[i]
     }
-    pub fn get_vector<const SIZE: usize>(
+    pub fn get_vector_view<const SIZE: usize>(
         &self,
         q: Q,
         i: usize,
@@ -56,16 +69,27 @@ impl QValueInput<'_> {
             .unwrap()
             .fixed_view::<SIZE, 1>(i * SIZE, 0)
     }
+    pub fn get_vector<const SIZE: usize>(
+        &self,
+        q: Q,
+        i: usize,
+    ) -> SVector<f64, SIZE>
+    {
+        SVector::<f64, SIZE>::from_column_slice(self.get_slice::<SIZE>(q, i))
+    }
     pub fn get_slice<const SIZE: usize>(&self, q: Q, i: usize) -> &[f64] {
         self.data[q as usize].as_ref().unwrap().as_slice()[i * SIZE..(i + 1) * SIZE].as_ref()
     }
 }
-impl QValueOutput<'_> {
+impl<'a> QValueOutput<'a> {
+    pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::LAST as usize]) -> Self{
+        Self { data: data }
+    }
     pub fn get_data(&mut self, q: Q) -> &DVectorViewMut<f64> {
         self.data[q as usize].as_mut().unwrap()
     }
     pub fn set_scalar(&mut self, q: Q, i: usize, value: f64) {
-        self.data[q as usize].as_mut().unwrap()[(i)] = value;
+        self.data[q as usize].as_mut().unwrap()[i] = value;
     }
     pub fn set_vector<const SIZE: usize>(&mut self, q: Q, i: usize, value: SVector<f64, SIZE>) {
         self.data[q as usize]
