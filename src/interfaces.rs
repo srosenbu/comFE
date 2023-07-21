@@ -19,6 +19,8 @@ pub enum Q {
     MandelStress,
     #[strum(serialize = "MandelStrain", serialize = "mandel_strain")]
     MandelStrain,
+    #[strum(serialize = "MandelStrainRate", serialize = "mandel_strain_rate")]
+    MandelStrainRate,
     #[strum(serialize = "MandelTangent", serialize = "mandel_tangent")]
     MandelTangent,
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
@@ -33,6 +35,12 @@ pub enum Q {
     Pressure,
     #[strum(serialize = "Damage", serialize = "damage")]
     Damage,
+    #[strum(serialize = "StrainRateNorm", serialize = "strain_rate_norm")]
+    StrainRateNorm,
+    #[strum(serialize = "EquivalentPlasticStrain", serialize = "equivalent_plastic_strain")]
+    EquivalentPlasticStrain,
+    #[strum(serialize = "MisesStress", serialize = "mises_stress")]
+    MisesStress,
     #[strum(serialize = "LAST", serialize = "last")]
     LAST,
 }
@@ -85,11 +93,23 @@ impl<'a> QValueOutput<'a> {
     pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::LAST as usize]) -> Self{
         Self { data: data }
     }
+    pub fn is_some(&self, q: Q) -> bool {
+        self.data[q as usize].is_some()
+    }
+    pub fn is_none(&self, q: Q) -> bool {
+        self.data[q as usize].is_none()
+    }
     pub fn get_data(&mut self, q: Q) -> &DVectorViewMut<f64> {
         self.data[q as usize].as_mut().unwrap()
     }
     pub fn set_scalar(&mut self, q: Q, i: usize, value: f64) {
         self.data[q as usize].as_mut().unwrap()[i] = value;
+    }
+    pub fn add_scalar(&mut self, q: Q, i: usize, value: f64) {
+        self.data[q as usize].as_mut().unwrap()[i] += value;
+    }
+    pub fn mul_scalar(&mut self, q: Q, i: usize, value: f64) {
+        self.data[q as usize].as_mut().unwrap()[i] *= value;
     }
     pub fn set_vector<const SIZE: usize>(&mut self, q: Q, i: usize, value: SVector<f64, SIZE>) {
         self.data[q as usize]
@@ -139,6 +159,9 @@ pub trait ConstitutiveModel {
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed
     fn define_output(&self) -> HashMap<Q, QDim>;
+    fn define_optional_output(&self) -> HashMap<Q, QDim> {
+        HashMap::new()
+    }
 
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput);
     fn evaluate(&self, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
