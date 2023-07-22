@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
@@ -105,8 +106,11 @@ impl PyConstitutiveModel {
                 QDim::Vector(n) => {
                     input_py.set_item(key.to_string(), n)?;
                 }
-                QDim::Tensor(n, m) => {
-                    input_py.set_item(key.to_string(), (n, m))?;
+                QDim::Tensor(n) => {
+                    input_py.set_item(key.to_string(), (n, n))?;
+                }
+                QDim::NonSquareTensor(n, m) => {
+                    panic!("NonSquareTensor not implemented yet");
                 }
             }
         }
@@ -123,8 +127,11 @@ impl PyConstitutiveModel {
                 QDim::Vector(n) => {
                     output_py.set_item(key.to_string(), n)?;
                 }
-                QDim::Tensor(n, m) => {
-                    output_py.set_item(key.to_string(), (n, m))?;
+                QDim::Tensor(n) => {
+                    output_py.set_item(key.to_string(), (n, n))?;
+                }
+                QDim::NonSquareTensor(n, m) => {
+                    panic!("NonSquareTensor not implemented yet");
                 }
             }
         }

@@ -2,17 +2,8 @@ use std::collections::HashMap;
 //use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumString, ToString};
 
-use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, Matrix, SVector, ViewStorage};
-// A struct that contains an attribute for each possible quadrature value
-// which is by default set to None.
-#[derive(Debug)]
-pub struct QValues<'a, T: 'a> {
-    //_marker: marker::PhantomData<&'a T>,
-    pub mandel_stress: &'a Option<T>,
-    pub mandel_strain: &'a Option<T>,
-    pub mandel_tangent: &'a Option<T>,
-    pub nonlocal_strain: &'a Option<T>,
-}
+use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, Matrix, SVector, ViewStorage, SMatrix};
+
 #[derive(Debug, EnumIter, Hash, PartialEq, Eq, EnumString, ToString)]
 pub enum Q {
     #[strum(serialize = "MandelStress", serialize = "mandel_stress")]
@@ -44,17 +35,19 @@ pub enum Q {
     #[strum(serialize = "LAST", serialize = "last")]
     LAST,
 }
+
 #[derive(Debug)]
 pub struct QValueInput<'a> {
     data: [Option<DVectorView<'a, f64>>; Q::LAST as usize],
 }
+
 #[derive(Debug)]
 pub struct QValueOutput<'a> {
     data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
 }
 impl<'a> QValueInput<'a> {
     pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::LAST as usize]) -> Self{
-        Self { data: data }
+        Self { data }
     }
     pub fn get_data(&self, q: Q) -> &DVectorView<f64> {
         self.data[q as usize].as_ref().unwrap()
@@ -85,13 +78,16 @@ impl<'a> QValueInput<'a> {
     {
         SVector::<f64, SIZE>::from_column_slice(self.get_slice::<SIZE>(q, i))
     }
+    pub fn get_tensor<const DIM: usize, const SIZE: usize>(&self, q:Q, i:usize) -> SMatrix<f64, DIM,DIM> {
+        SMatrix::<f64, DIM, DIM>::from_row_slice(self.get_slice::<{SIZE}>(q, i))
+    }
     pub fn get_slice<const SIZE: usize>(&self, q: Q, i: usize) -> &[f64] {
         self.data[q as usize].as_ref().unwrap().as_slice()[i * SIZE..(i + 1) * SIZE].as_ref()
     }
 }
 impl<'a> QValueOutput<'a> {
     pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::LAST as usize]) -> Self{
-        Self { data: data }
+        Self { data }
     }
     pub fn is_some(&self, q: Q) -> bool {
         self.data[q as usize].is_some()
@@ -130,28 +126,56 @@ impl<'a> QValueOutput<'a> {
 pub enum QDim {
     Scalar,
     Vector(usize),
-    Tensor(usize, usize),
+    Tensor(usize),
+    NonSquareTensor(usize, usize),
 }
 
 impl QDim {
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         match self {
             QDim::Scalar => 1,
             QDim::Vector(n) => *n,
-            QDim::Tensor(m, n) => *m * *n,
+            QDim::Tensor(n) => n.pow(2),
+            QDim::NonSquareTensor(n, m) => *n * *m,
+        }
+    }
+    pub const fn dim(&self) -> (usize, usize) {
+        match self {
+            QDim::Scalar => (1,1),
+            QDim::Vector(n) => (*n, 1),
+            QDim::Tensor(n) => (*n,*n),
+            QDim::NonSquareTensor(n, m) => (*n, *m),
         }
     }
 }
 
-impl<'a, T> Default for QValues<'a, T> {
-    fn default() -> Self {
-        QValues {
-            mandel_stress: &None,
-            mandel_strain: &None,
-            mandel_tangent: &None,
-            nonlocal_strain: &None,
+impl Q {
+    pub const fn q_dim(&self) -> QDim {
+        match self {
+            Q::MandelStress => QDim::Vector(6),
+            Q::MandelStrain => QDim::Vector(6),
+            Q::MandelStrainRate => QDim::Vector(6),
+            Q::MandelTangent => QDim::Tensor(6),
+            Q::VelocityGradient => QDim::Tensor(3),
+            Q::NonlocalStrain => QDim::Scalar,
+            Q::Lambda => QDim::Scalar,
+            Q::Density => QDim::Scalar,
+            Q::Pressure => QDim::Scalar,
+            Q::Damage => QDim::Scalar,
+            Q::StrainRateNorm => QDim::Scalar,
+            Q::EquivalentPlasticStrain => QDim::Scalar,
+            Q::MisesStress => QDim::Scalar,
+            Q::LAST => QDim::Scalar,
         }
     }
+    pub const fn dim(&self) -> usize {
+        self.q_dim().dim().0
+        
+    }
+    pub const fn size(&self) -> usize {
+        self.q_dim().size()
+    }
+
 }
 
 pub trait ConstitutiveModel {
