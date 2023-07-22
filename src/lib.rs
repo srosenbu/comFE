@@ -33,7 +33,7 @@ impl PyConstitutiveModel {
         //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
 
         for (key, value) in input.iter() {
-            let q = Q::from_str(key).expect("Name unknown");
+            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
             input_data[q as usize] = Some(
                 value
                     .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
@@ -41,7 +41,7 @@ impl PyConstitutiveModel {
             );
         }
         for (key, value) in output.iter() {
-            let q = Q::from_str(key).expect("Name unknown");
+            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
             output_data[q as usize] = Some(
                 value
                     .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
@@ -68,7 +68,7 @@ impl PyConstitutiveModel {
 
 
         for (key, value) in input.iter() {
-            let q = Q::from_str(key).expect("Name unknown");
+            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
             input_data[q as usize] = Some(
                 value
                     .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
@@ -76,7 +76,7 @@ impl PyConstitutiveModel {
             );
         }
         for (key, value) in output.iter() {
-            let q = Q::from_str(key).expect("Name unknown");
+            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
             output_data[q as usize] = Some(
                 value
                     .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
@@ -154,8 +154,8 @@ impl PyLinearElastic3D {
     #[new]
     fn new(parameters: &PyDict) -> Self {
         let mut D = SMatrix::<f64, 6, 6>::zeros();
-        let E = parameters.get_item("E").unwrap().extract::<f64>().unwrap();
-        let nu = parameters.get_item("nu").unwrap().extract::<f64>().unwrap();
+        let E = parameters.get_item("E").unwrap().extract::<f64>().expect("Failed to read youngs modulus from Python");
+        let nu = parameters.get_item("nu").unwrap().extract::<f64>().expect("Failed to read poisson ratio from Python");
         let c1 = E / (1.0 + nu) / (1.0 - 2.0 * nu);
         let c2 = c1 * (1.0 - nu);
         D[(0, 0)] = c2;
