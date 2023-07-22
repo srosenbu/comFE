@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
+use crate::jh2::JH23D;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
-
+//use crate::stress_strain;
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
@@ -11,6 +12,8 @@ use pyo3::types::PyDict;
 use std::str::FromStr;
 pub mod interfaces;
 pub mod smallstrain;
+pub mod jh2;
+pub mod stress_strain;
 
 #[pyclass(unsendable)]
 struct PyConstitutiveModel {
@@ -48,8 +51,8 @@ impl PyConstitutiveModel {
                     .unwrap(),
             );
         }
-        let q_input = QValueInput { data: input_data };
-        let mut q_output = QValueOutput { data: output_data };
+        let q_input = QValueInput::new(input_data);
+        let mut q_output = QValueOutput::new(output_data);
         self.model.evaluate(del_t, &q_input, &mut q_output);
         Ok(())
     }
@@ -84,8 +87,8 @@ impl PyConstitutiveModel {
             );
         }
 
-        let q_input = QValueInput { data: input_data };
-        let mut q_output = QValueOutput { data: output_data };
+        let q_input = QValueInput::new(input_data);
+        let mut q_output = QValueOutput::new(output_data);
 
         self.model
             .evaluate_some(del_t, &q_input, &mut q_output, ips.as_slice().unwrap());

@@ -59,7 +59,7 @@ impl ConstitutiveModel for LinearElastic3D {
         let strain = input.get_vector::<6>(Q::MandelStrain, ip);
 
         let new_stress = self.D * strain;
-
+        
         output.set_vector::<6>(Q::MandelStress, ip, new_stress);
         output.set_slice::<36>(Q::MandelTangent, ip, &self.D.as_slice());
     }

@@ -71,8 +71,10 @@ for n in sizes:
     for j in range(n_timings):
         with timer_rust_box:
             rust_law_box.evaluate(0.5, input, output)
+    for j in range(n_timings):
         with timer_rust:
             rust_law.evaluate(0.5, sigma_rust, eps, Ct)
+    for j in range(n_timings):
         with timer_indices:
             rust_law_indices.evaluate_some(0.5, sigma_indices, eps, Ct, indices)
 
