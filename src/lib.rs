@@ -10,6 +10,7 @@ use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
+
 use std::str::FromStr;
 pub mod interfaces;
 pub mod smallstrain;
@@ -106,10 +107,10 @@ impl PyConstitutiveModel {
                 QDim::Vector(n) => {
                     input_py.set_item(key.to_string(), n)?;
                 }
-                QDim::Tensor(n) => {
+                QDim::SquareTensor(n) => {
                     input_py.set_item(key.to_string(), (n, n))?;
                 }
-                QDim::NonSquareTensor(n, m) => {
+                QDim::Tensor(n, m) => {
                     panic!("NonSquareTensor not implemented yet");
                 }
             }
@@ -127,10 +128,10 @@ impl PyConstitutiveModel {
                 QDim::Vector(n) => {
                     output_py.set_item(key.to_string(), n)?;
                 }
-                QDim::Tensor(n) => {
+                QDim::SquareTensor(n) => {
                     output_py.set_item(key.to_string(), (n, n))?;
                 }
-                QDim::NonSquareTensor(n, m) => {
+                QDim::Tensor(n, m) => {
                     panic!("NonSquareTensor not implemented yet");
                 }
             }
@@ -231,17 +232,33 @@ impl PyLinearElastic3D {
     }
 }
 
-#[pyfunction]
-fn py_new_linear_elastic_3d(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
-    let linear_elastic = LinearElastic3D::new(&parameters);
-    Ok(PyConstitutiveModel {
-        model: Box::new(linear_elastic),
-    })
+macro_rules! impl_py_new {
+    ($name:ident, $model:ty, $m:expr) => {
+        #[pyfunction]
+        fn $name(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
+            let model = <$model>::new(&parameters);
+            Ok(PyConstitutiveModel {
+                model: Box::new(model),
+            })
+        }
+        $m.add_function(wrap_pyfunction!($name, $m)?)?;
+    };
 }
+
+// #[pyfunction]
+// fn py_new_linear_elastic_3d(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
+//     let linear_elastic = LinearElastic3D::new(&parameters);
+//     Ok(PyConstitutiveModel {
+//         model: Box::new(linear_elastic),
+//     })
+// }
 
 #[pymodule]
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
-    m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
+    m.add_class::<PyConstitutiveModel>()?;
+    //m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
+    impl_py_new!(new_linear_elastic_3d, LinearElastic3D, m);
+    impl_py_new!(new_jh2_3d, JH23D, m);
     Ok(())
 }

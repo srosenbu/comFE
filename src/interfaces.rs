@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 //use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumString, ToString};
@@ -16,8 +17,8 @@ pub enum Q {
     MandelTangent,
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
     VelocityGradient,
-    #[strum(serialize = "NonlocalStrain", serialize = "nonlocal_strain")]
-    NonlocalStrain,
+    #[strum(serialize = "NonlocalEquivalentStrain", serialize = "nonlocal_equivalent_strain")]
+    NonlocalEquivalentStrain,
     #[strum(serialize = "Lambda", serialize = "lambda")]
     Lambda,
     #[strum(serialize =  "Density", serialize = "density")]
@@ -46,6 +47,12 @@ pub struct QValueOutput<'a> {
     data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
 }
 impl<'a> QValueInput<'a> {
+    //TODO: When the const generics are stabilized, most of this should be changed to sth like
+    // ```rust
+    // pub fn get<Q>(&self) -> SMatrix<f64, Q::n, Q::m> { ... }; 
+    // pub fn get<Q>(&self) -> Q::AssociatedType){ ... }; 
+    // ```
+
     pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::LAST as usize]) -> Self{
         Self { data }
     }
@@ -86,6 +93,12 @@ impl<'a> QValueInput<'a> {
     }
 }
 impl<'a> QValueOutput<'a> {
+    //TODO: When the const generics are stabilized, most of this should be changed to sth like
+    // ```rust
+    // pub fn set<Q>(&self, value: SMatrix<f64, Q::n, Q::m>){ ... }; 
+    // pub fn set<Q>(&self, value: Q::AssociatedType){ ... }; 
+    // ```
+
     pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::LAST as usize]) -> Self{
         Self { data }
     }
@@ -126,8 +139,8 @@ impl<'a> QValueOutput<'a> {
 pub enum QDim {
     Scalar,
     Vector(usize),
-    Tensor(usize),
-    NonSquareTensor(usize, usize),
+    SquareTensor(usize),
+    Tensor(usize, usize),
 }
 
 impl QDim {
@@ -135,29 +148,31 @@ impl QDim {
         match self {
             QDim::Scalar => 1,
             QDim::Vector(n) => *n,
-            QDim::Tensor(n) => n.pow(2),
-            QDim::NonSquareTensor(n, m) => *n * *m,
+            QDim::SquareTensor(n) => n.pow(2),
+            QDim::Tensor(n, m) => *n * *m,
         }
     }
-    pub const fn dim(&self) -> (usize, usize) {
+    pub const fn dim(&self) -> usize {
         match self {
-            QDim::Scalar => (1,1),
-            QDim::Vector(n) => (*n, 1),
-            QDim::Tensor(n) => (*n,*n),
-            QDim::NonSquareTensor(n, m) => (*n, *m),
+            QDim::Scalar => 1,
+            QDim::Vector(n) => *n,
+            QDim::SquareTensor(n) => *n,
+            QDim::Tensor(n, m) => panic!("Tensor dimensions are not implemented yet."),
         }
     }
 }
 
 impl Q {
+    //TODO: When the const generics are stabilized, all functions should be made dependent on
+    // an enumertion of constraints, e.g. 3D, PlaneStrain, PlaneStress etc.
     pub const fn q_dim(&self) -> QDim {
         match self {
             Q::MandelStress => QDim::Vector(6),
             Q::MandelStrain => QDim::Vector(6),
             Q::MandelStrainRate => QDim::Vector(6),
-            Q::MandelTangent => QDim::Tensor(6),
-            Q::VelocityGradient => QDim::Tensor(3),
-            Q::NonlocalStrain => QDim::Scalar,
+            Q::MandelTangent => QDim::SquareTensor(6),
+            Q::VelocityGradient => QDim::SquareTensor(3),
+            Q::NonlocalEquivalentStrain => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,
@@ -169,7 +184,7 @@ impl Q {
         }
     }
     pub const fn dim(&self) -> usize {
-        self.q_dim().dim().0
+        self.q_dim().dim()
         
     }
     pub const fn size(&self) -> usize {

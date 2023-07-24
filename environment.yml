@@ -6,6 +6,9 @@ dependencies:
   - maturin
   - pytest
   - conda-ecosystem-user-package-isolation
+  - fenics-dolfinx
+  - numpy
+  - scipy
   - pip
   - pip:
       - -e .

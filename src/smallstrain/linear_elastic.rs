@@ -63,13 +63,15 @@ impl ConstitutiveModel for LinearElastic3D {
         output.set_vector(Q::MandelStress, ip, new_stress);
         output.set_slice::<36>(Q::MandelTangent, ip, &self.D.as_slice());
     }
+
     fn define_input(&self) -> HashMap<Q, QDim> {
-        HashMap::from([(Q::MandelStrain, QDim::Vector(6))])
+        HashMap::from([(Q::MandelStrain, Q::MandelStrain.q_dim())])
     }
+
     fn define_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::MandelStress, QDim::Vector(6)),
-            (Q::MandelTangent, QDim::Tensor(6)),
+            (Q::MandelStress, Q::MandelStress.q_dim()),
+            (Q::MandelTangent, Q::MandelTangent.q_dim()),
         ])
     }
 }

@@ -168,11 +168,14 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::MandelStrainRate) {
             output.set_vector(Q::MandelStrainRate, ip, d_eps);
         }
+        if output.is_some(Q::MisesStress) {
+            output.set_scalar(Q::MisesStress, ip, alpha * s_tr_eq);
+        }
     }
 
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::VelocityGradient, QDim::Tensor(3)),
+            (Q::VelocityGradient, QDim::SquareTensor(3)),
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
@@ -194,6 +197,7 @@ impl ConstitutiveModel for JH23D {
             (Q::EquivalentPlasticStrain, QDim::Scalar),
             (Q::StrainRateNorm, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
+            (Q::MisesStress, QDim::Scalar),
         ])
     }
 }
