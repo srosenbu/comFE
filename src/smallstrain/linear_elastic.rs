@@ -2,12 +2,15 @@ use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use nalgebra::SMatrix;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct LinearElastic3D {
     pub D: SMatrix<f64, 6, 6>,
 }
 
-impl LinearElastic3D {
-    pub fn new(parameters: &HashMap<String, f64>) -> Self {
+
+
+impl ConstitutiveModel for LinearElastic3D {
+    fn new(parameters: &HashMap<String, f64>) -> Self {
         let E = parameters.get("E").unwrap();
         let nu = parameters.get("nu").unwrap();
         let mu = E / (2.0 * (1.0 + nu));
@@ -52,9 +55,6 @@ impl LinearElastic3D {
         );
         Self { D: D }
     }
-}
-
-impl ConstitutiveModel for LinearElastic3D {
     fn evaluate_ip(&self, ip: usize, _del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let strain = input.get_vector::<{Q::MandelStrain.size()}>(Q::MandelStrain, ip);
 

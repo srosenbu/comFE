@@ -15,19 +15,6 @@ def set_mesh_coordinates(mesh, x, mode="set"):
     elif mode == "add":
         mesh.geometry.x[:, :dim] += array.reshape(-1, dim)
 
-
-def set_local(u, u_array):
-    u.vector.array[:] = u_array
-    u.x.scatter_forward()
-    #u.vector.ghostUpdate()
-
-
-def add_local(u, u_array):
-    u.vector.array[:] += u_array
-    u.x.scatter_forward()
-    #u.vector.ghostUpdate()
-
-
 class QuadratureRule:
     def __init__(
         self,
@@ -253,54 +240,7 @@ class TimestepEstimator:
         self.del_t =self.safety_factor *  2. / self.eig_max ** 0.5
         return self.del_t
 
-def critical_timestep(mesh, l_x, l_y, G, K, rho, order=1):
-    # todo: implement other cell_types
-    cell_type = mesh.topology.cell_type
-    if cell_type == dfx.mesh.CellType.triangle:
-        h_mesh = dfx.mesh.create_rectangle(
-            MPI.COMM_SELF,
-            np.array([[0.0, 0.0], [l_x, l_y]]),
-            [1, 1],
-            cell_type=cell_type,
-            diagonal=DiagonalType.crossed,
-        )
-    elif cell_type == dfx.mesh.CellType.quadrilateral:
-        h_mesh = dfx.mesh.create_rectangle(
-            MPI.COMM_SELF,
-            np.array([[0.0, 0.0], [l_x, l_y]]),
-            [1, 1],
-            cell_type=cell_type,
-        )
-    else:
-        raise TypeError('Cell type "' + str(cell_type) + '" is not yet supported')
-
-    def eps(v):
-        return ufl.sym(ufl.grad(v))
-
-    def sigma(v):
-        e = eps(v)
-        return (K - (2.0 / 3.0) * G) * ufl.tr(e) * ufl.Identity(2) + 2.0 * G * e
-
-    h_P1 = dfx.fem.VectorFunctionSpace(h_mesh, ("CG", order))
-    h_u, h_v = ufl.TrialFunction(h_P1), ufl.TestFunction(h_P1)
-    K_form = dfx.fem.form(ufl.inner(eps(h_u), sigma(h_v)) * ufl.dx)
-    M_form = dfx.fem.form(rho * ufl.inner(h_u, h_v) * ufl.dx)
-
-    h_K, h_M = (
-        dfx.fem.petsc.assemble_matrix(K_form),
-        dfx.fem.petsc.assemble_matrix(M_form),
-    )
-    h_K.assemble()
-    h_M.assemble()
-    h_M = np.array(h_M[:, :])
-    h_K = np.array(h_K[:, :])
-    max_eig = np.linalg.norm(eigvals(h_K, h_M), np.inf)
-
-    h = 2.0 / max_eig ** 0.5
-    return h
-
-
-def critical_timestep_2(l_x, l_y, G, K, rho, cell_type=dfx.mesh.CellType.quadrilateral, order=1):
+def critical_timestep(l_x, l_y, G, K, rho, cell_type=dfx.mesh.CellType.quadrilateral, order=1):
     # todo: implement other cell_types
     # cell_type=mesh.topology.cell_type
     if cell_type == dfx.mesh.CellType.triangle:

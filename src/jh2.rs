@@ -7,6 +7,7 @@ use nalgebra::SMatrix;
 use std::cmp;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 struct JH2Parameters {
     RHO: f64,
     SHEAR_MODULUS: f64,
@@ -27,12 +28,13 @@ struct JH2Parameters {
     BETA: f64,
     EFMIN: f64,
 }
+#[derive(Debug)]
 pub struct JH23D {
     parameters: JH2Parameters,
 }
 
-impl JH23D {
-    pub fn new(parameters: &HashMap<String, f64>) -> Self {
+impl ConstitutiveModel for JH23D {
+    fn new(parameters: &HashMap<String, f64>) -> Self {
         Self {
             parameters: JH2Parameters {
                 RHO: *parameters.get("RHO").unwrap(),
@@ -56,9 +58,6 @@ impl JH23D {
             },
         }
     }
-}
-
-impl ConstitutiveModel for JH23D {
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let velocity_gradient = input
             .get_tensor::<{ Q::VelocityGradient.dim() }, { Q::VelocityGradient.size() }>(

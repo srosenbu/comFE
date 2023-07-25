@@ -69,21 +69,6 @@ pub fn mandel_rate_from_velocity_gradient(velocity_gradient: &SMatrix<f64, 3, 3>
     )
 }
 
-// #[deprecated]
-// pub const T_dev : SMatrix<f64, 6, 6> =  SMatrix::<f64, 6, 6>::new(
-//     2.0/3.0, -1.0/3.0, -1.0/3.0, 0.0, 0.0, 0.0,
-//     -1.0/3.0, 2.0/3.0, -1.0/3.0, 0.0, 0.0, 0.0,
-//     -1.0/3.0, -1.0/3.0, 2.0/3.0, 0.0, 0.0, 0.0,
-//     0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-//     0.0, 0.0, 0.0, 0., 1.0, 0.0,
-//     0.0, 0.0, 0.0, 0., 0.0, 1.0,
-// );
-
-// #[deprecated]
-// pub const T_vol: SVector<f64, 6> = SVector::<f64, 6>::new(
-//     1.0/3.0, 1.0/3.0, 1.0/3.0, 0.0, 0.0, 0.0
-// );
-
 pub const MANDEL_IDENTITY: SVector<f64, 6> = SVector::<f64, 6>::new(
     1.0, 1.0, 1.0, 0.0, 0.0, 0.0
 );
@@ -123,9 +108,22 @@ pub fn jaumann_rotation(del_t:f64, velocity_gradient: &DVectorView<f64>, stress:
         let stress_i  = SVector::<f64, 6>::from_column_slice(stress_view.as_slice());
         stress_view.x += del_t * FACTOR * (  stress_i.a * differences[1] + stress_i.b * differences[0]);
         stress_view.y += del_t * FACTOR * (  stress_i.w * differences[2] - stress_i.b * differences[0]);
-        stress_view.z = del_t * FACTOR * (- stress_i.w * differences[2] - stress_i.a * differences[1]);
-        stress_view.w = del_t * FACTOR * (- stress_i.y * differences[2] + stress_i.z * differences[2] - FACTOR * (stress_i.a * differences[0] + stress_i.b * differences[1]));
-        stress_view.a = del_t * FACTOR * (- stress_i.x * differences[1] - stress_i.z * differences[1] + FACTOR * (stress_i.w * differences[0] - stress_i.b * differences[2]));
-        stress_view.b = del_t * FACTOR * (- stress_i.x * differences[0] + stress_i.y * differences[0] + FACTOR * (stress_i.w * differences[1] + stress_i.a * differences[2]));
+        stress_view.z += del_t * FACTOR * (- stress_i.w * differences[2] - stress_i.a * differences[1]);
+        stress_view.w += del_t * FACTOR * (- stress_i.y * differences[2] + stress_i.z * differences[2] - FACTOR * (stress_i.a * differences[0] + stress_i.b * differences[1]));
+        stress_view.a += del_t * FACTOR * (- stress_i.x * differences[1] - stress_i.z * differences[1] + FACTOR * (stress_i.w * differences[0] - stress_i.b * differences[2]));
+        stress_view.b += del_t * FACTOR * (- stress_i.x * differences[0] + stress_i.y * differences[0] + FACTOR * (stress_i.w * differences[1] + stress_i.a * differences[2]));
     }
 }
+//TODO
+// pub fn jaumann_rotation_expensive(del_t:f64, velocity_gradient: &DVectorView<f64>, stress: &mut DVectorViewMut<f64>){
+//     //const FACTOR:f64 = 0.7071067811865475; // 1/sqrt(2)
+//     let n = velocity_gradient.len() / 9;
+//     let m = stress.len() / 6;
+//     assert!(n==m, "Velocity gradient and stress must have the same number of elements");
+//     for i in 0..n {
+//         let vel_grad = SMatrix::<f64, 3,3>::from_row_slice(velocity_gradient.fixed_view::<9, 1>(i*9, 0).as_slice());
+//         let mut stress_view = stress.fixed_view_mut::<6, 1>(i*6, 0);
+
+        
+//     }
+// }

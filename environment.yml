@@ -9,6 +9,7 @@ dependencies:
   - fenics-dolfinx
   - numpy
   - scipy
+  - pydantic
   - pip
   - pip:
       - -e .

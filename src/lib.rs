@@ -10,136 +10,184 @@ use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-
 use std::str::FromStr;
 pub mod interfaces;
-pub mod smallstrain;
 pub mod jh2;
+pub mod smallstrain;
 pub mod stress_strain;
 
-#[pyclass(unsendable)]
-struct PyConstitutiveModel {
-    model: Box<dyn ConstitutiveModel>,
-}
+//#[pyclass(unsendable)]
+//struct PyConstitutiveModel {
+//    model: Box<dyn ConstitutiveModel>,
+//}
 
-#[pymethods]
-impl PyConstitutiveModel {
-    fn evaluate(
-        &self,
-        del_t: f64,
-        input: HashMap<String, PyReadonlyArray1<f64>>,
-        output: HashMap<String, PyReadwriteArray1<f64>>,
-    ) -> PyResult<()> {
-        let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
-            std::array::from_fn(|_| None);
-
-        let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
-            std::array::from_fn(|_| None);
-        //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
-
-        for (key, value) in input.iter() {
-            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
-            input_data[q as usize] = Some(
-                value
-                    .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
-                    .unwrap(),
-            );
+//#[pymethods]
+macro_rules! impl_constitutive_model {
+    ($name:ident, $model:ty, $m:expr) => {
+        #[pyclass]
+        struct $name {
+            model: $model,
         }
-        for (key, value) in output.iter() {
-            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
-            output_data[q as usize] = Some(
-                value
-                    .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-                    .unwrap(),
-            );
-        }
-        let q_input = QValueInput::new(input_data);
-        let mut q_output = QValueOutput::new(output_data);
-        self.model.evaluate(del_t, &q_input, &mut q_output);
-        Ok(())
-    }
-    fn evaluate_some(
-        &self,
-        del_t: f64,
-        input: HashMap<String, PyReadonlyArray1<f64>>,
-        output: HashMap<String, PyReadwriteArray1<f64>>,
-        ips: PyReadonlyArray1<usize>,
-    ) -> PyResult<()> {
-        let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
-            std::array::from_fn(|_| None);
+        #[pymethods]
+        impl $name {
+            #[new]
+            fn new(parameters: HashMap<String, f64>) -> PyResult<Self>{
+                let model = <$model>::new(&parameters);
+                Ok($name { model: model })
+            }
+            fn __str__(&self) -> PyResult<String> {
+                Ok(format!("{:?}", self.model))
+            }
+            fn evaluate(
+                &self,
+                del_t: f64,
+                input: HashMap<String, PyReadonlyArray1<f64>>,
+                output: HashMap<String, PyReadwriteArray1<f64>>,
+            ) -> PyResult<()> {
+                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                    std::array::from_fn(|_| None);
 
-        let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
-            std::array::from_fn(|_| None);
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                    std::array::from_fn(|_| None);
+                //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
 
-
-        for (key, value) in input.iter() {
-            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
-            input_data[q as usize] = Some(
-                value
-                    .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
-                    .unwrap(),
-            );
-        }
-        for (key, value) in output.iter() {
-            let q = Q::from_str(key).expect(&format!("Failed to read dictionary from Python. Name {} unknown", key));
-            output_data[q as usize] = Some(
-                value
-                    .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
-                    .unwrap(),
-            );
-        }
-
-        let q_input = QValueInput::new(input_data);
-        let mut q_output = QValueOutput::new(output_data);
-
-        self.model
-            .evaluate_some(del_t, &q_input, &mut q_output, ips.as_slice().unwrap());
-        Ok(())
-    }
-    fn define_input(&self, py: Python) -> PyResult<PyObject> {
-        let input_py = PyDict::new(py);
-        let input_rs = self.model.define_input();
-        for (key, value) in input_rs.iter() {
-            match value {
-                QDim::Scalar => {
-                    input_py.set_item(key.to_string(), 1)?;
+                for (key, value) in input.iter() {
+                    let q = Q::from_str(key).expect(&format!(
+                        "Failed to read dictionary from Python. Name {} unknown",
+                        key
+                    ));
+                    input_data[q as usize] = Some(
+                        value
+                            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+                            .unwrap(),
+                    );
                 }
-                QDim::Vector(n) => {
-                    input_py.set_item(key.to_string(), n)?;
+                for (key, value) in output.iter() {
+                    let q = Q::from_str(key).expect(&format!(
+                        "Failed to read dictionary from Python. Name {} unknown",
+                        key
+                    ));
+                    output_data[q as usize] = Some(
+                        value
+                            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+                            .unwrap(),
+                    );
                 }
-                QDim::SquareTensor(n) => {
-                    input_py.set_item(key.to_string(), (n, n))?;
+                let q_input = QValueInput::new(input_data);
+                let mut q_output = QValueOutput::new(output_data);
+                self.model.evaluate(del_t, &q_input, &mut q_output);
+                Ok(())
+            }
+            fn evaluate_some(
+                &self,
+                del_t: f64,
+                input: HashMap<String, PyReadonlyArray1<f64>>,
+                output: HashMap<String, PyReadwriteArray1<f64>>,
+                ips: PyReadonlyArray1<usize>,
+            ) -> PyResult<()> {
+                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                    std::array::from_fn(|_| None);
+
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                    std::array::from_fn(|_| None);
+
+                for (key, value) in input.iter() {
+                    let q = Q::from_str(key).expect(&format!(
+                        "Failed to read dictionary from Python. Name {} unknown",
+                        key
+                    ));
+                    input_data[q as usize] = Some(
+                        value
+                            .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+                            .unwrap(),
+                    );
                 }
-                QDim::Tensor(n, m) => {
-                    panic!("NonSquareTensor not implemented yet");
+                for (key, value) in output.iter() {
+                    let q = Q::from_str(key).expect(&format!(
+                        "Failed to read dictionary from Python. Name {} unknown",
+                        key
+                    ));
+                    output_data[q as usize] = Some(
+                        value
+                            .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+                            .unwrap(),
+                    );
                 }
+
+                let q_input = QValueInput::new(input_data);
+                let mut q_output = QValueOutput::new(output_data);
+
+                self.model
+                    .evaluate_some(del_t, &q_input, &mut q_output, ips.as_slice().unwrap());
+                Ok(())
+            }
+            fn define_input(&self, py: Python) -> PyResult<PyObject> {
+                let input_py = PyDict::new(py);
+                let input_rs = self.model.define_input();
+                for (key, value) in input_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            input_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            input_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            input_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("NonSquareTensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(input_py.into())
+            }
+            fn define_output(&self, py: Python) -> PyResult<PyObject> {
+                let output_py = PyDict::new(py);
+                let output_rs = self.model.define_output();
+                for (key, value) in output_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            output_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            output_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            output_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("NonSquareTensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(output_py.into())
+            }
+            fn define_optional_output(&self, py: Python) -> PyResult<PyObject> {
+                let output_py = PyDict::new(py);
+                let output_rs = self.model.define_optional_output();
+                for (key, value) in output_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            output_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            output_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            output_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("NonSquareTensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(output_py.into())
             }
         }
-        Ok(input_py.into())
-    }
-    fn define_output(&self, py: Python) -> PyResult<PyObject> {
-        let output_py = PyDict::new(py);
-        let output_rs = self.model.define_output();
-        for (key, value) in output_rs.iter() {
-            match value {
-                QDim::Scalar => {
-                    output_py.set_item(key.to_string(), 1)?;
-                }
-                QDim::Vector(n) => {
-                    output_py.set_item(key.to_string(), n)?;
-                }
-                QDim::SquareTensor(n) => {
-                    output_py.set_item(key.to_string(), (n, n))?;
-                }
-                QDim::Tensor(n, m) => {
-                    panic!("NonSquareTensor not implemented yet");
-                }
-            }
-        }
-        Ok(output_py.into())
-    }
+        $m.add_class::<$name>()?;
+    };
 }
-
 #[pyclass]
 struct PyLinearElastic3D {
     D: SMatrix<f64, 6, 6>,
@@ -165,8 +213,16 @@ impl PyLinearElastic3D {
     #[new]
     fn new(parameters: &PyDict) -> Self {
         let mut D = SMatrix::<f64, 6, 6>::zeros();
-        let E = parameters.get_item("E").unwrap().extract::<f64>().expect("Failed to read youngs modulus from Python");
-        let nu = parameters.get_item("nu").unwrap().extract::<f64>().expect("Failed to read poisson ratio from Python");
+        let E = parameters
+            .get_item("E")
+            .unwrap()
+            .extract::<f64>()
+            .expect("Failed to read youngs modulus from Python");
+        let nu = parameters
+            .get_item("nu")
+            .unwrap()
+            .extract::<f64>()
+            .expect("Failed to read poisson ratio from Python");
         let c1 = E / (1.0 + nu) / (1.0 - 2.0 * nu);
         let c2 = c1 * (1.0 - nu);
         D[(0, 0)] = c2;
@@ -232,33 +288,10 @@ impl PyLinearElastic3D {
     }
 }
 
-macro_rules! impl_py_new {
-    ($name:ident, $model:ty, $m:expr) => {
-        #[pyfunction]
-        fn $name(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
-            let model = <$model>::new(&parameters);
-            Ok(PyConstitutiveModel {
-                model: Box::new(model),
-            })
-        }
-        $m.add_function(wrap_pyfunction!($name, $m)?)?;
-    };
-}
-
-// #[pyfunction]
-// fn py_new_linear_elastic_3d(parameters: HashMap<String, f64>) -> PyResult<PyConstitutiveModel> {
-//     let linear_elastic = LinearElastic3D::new(&parameters);
-//     Ok(PyConstitutiveModel {
-//         model: Box::new(linear_elastic),
-//     })
-// }
-
 #[pymodule]
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
-    m.add_class::<PyConstitutiveModel>()?;
-    //m.add_function(wrap_pyfunction!(py_new_linear_elastic_3d, m)?)?;
-    impl_py_new!(new_linear_elastic_3d, LinearElastic3D, m);
-    impl_py_new!(new_jh2_3d, JH23D, m);
+    impl_constitutive_model!(PyJH23D, JH23D, m);
+    impl_constitutive_model!(PyLinElas3D, LinearElastic3D, m);
     Ok(())
 }

@@ -194,6 +194,7 @@ impl Q {
 }
 
 pub trait ConstitutiveModel {
+    fn new(parameters: &HashMap<String, f64>) -> Self;
     //Mainly for the purpose of telling Python what is needed
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed

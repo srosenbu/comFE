@@ -5,30 +5,27 @@ import ufl
 from petsc4py import PETSc
 import basix
 
-# import constitutive as c
-import constitutiveX.cpp as _cpp
-import dolfinx as dfx
+import dolfinx as df
 import ufl
-from constitutiveX.helpers import (
+from .helpers import (
     QuadratureRule,
     QuadratureEvaluator,
-    get_local,
-    set_local,
-    add_local,
     set_mesh_coordinates,
 )
+from pydantic import BaseModel
+from .laws import RustConstitutiveModel
 
 
-class CDMX3D:
+class CDMX3D(BaseModel):
     def __init__(
         self,
-        function_space,
-        t0,
-        f_ext,
-        bcs,
+        function_space: df.fem.FunctionSpace,
+        t0:float,
+        f_ext:callable,
+        bcs: list[df.fem.DirichletBC],
         M,
-        law,
-        quadrature_rule,
+        law: RustConstitutiveModel,
+        quadrature_rule: QuadratureRule,
         nonlocal_var=None,
         damping=None,
         b_bar=False,
@@ -36,15 +33,15 @@ class CDMX3D:
         self.mesh = function_space.mesh
         self.quadrature_rule = quadrature_rule
         self.del_t = None
-        self.v = dfx.fem.Function(function_space, name="Velocity")
-        self.u = dfx.fem.Function(function_space, name="Displacements")
+        self.v = df.fem.Function(function_space, name="Velocity")
+        self.u = df.fem.Function(function_space, name="Displacements")
 
         self.f = self.v.vector.copy()
         self.damping = damping
 
         self.QV = self.quadrature_rule.create_quadrature_vector_space(self.mesh, 6)
 
-        self.stress = dfx.fem.Function(self.QV, name="Mandel_Stress")
+        self.stress = df.fem.Function(self.QV, name="Mandel_Stress")
 
         self.local_q_dim = self.quadrature_rule.number_of_points(self.mesh)
 
