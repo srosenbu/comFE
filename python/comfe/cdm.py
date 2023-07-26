@@ -27,7 +27,7 @@ class CDMX3D(BaseModel):
     f_int_form: df.fem.FormMetaClass
     L_evaluator: QuadratureEvaluator
     bcs: list[df.fem.DirichletBCMetaClass]
-    M: PETSc.Vec
+    M: df.fem.Function
     nonlocal_var: NonlocalInterface | None = None
     model: ConstitutiveModel
     fields: dict[str, df.fem.Function]
@@ -39,11 +39,11 @@ class CDMX3D(BaseModel):
         t0: float,
         f_ext: Callable,
         bcs: list[df.fem.DirichletBCMetaClass],
-        M: PETSc.Vec,
+        M: df.fem.Function,
         rust_model: RustConstitutiveModel,
         quadrature_rule: QuadratureRule,
         nonlocal_var : NonlocalInterface | None = None,
-        damping: float | None=None,
+        #damping: float | None=None,
     ):
         self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
@@ -134,29 +134,29 @@ class CDMX3D(BaseModel):
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
         # Advance velocities and nodal positions in time
-        if self.damping is None:
-            c1 = 1.0
-            c2 = del_t_mid
-        else:
-            c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
-            c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
+        #if self.damping is None:
+        #    c1 = 1.0
+        #    c2 = del_t_mid
+        #else:
+        #    c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
+        #    c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
 
-        self.fields["v"].vector.array[:] =  c1 * self.fields["v"] + c2 * self.M.array * self.fields["f"].vector.array
+        self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
 
-        df.fem.set_bc(self.fields["v"].vector.array, self.bcs)
+        df.fem.set_bc(self.fields["v"].vector, self.bcs)
         # ghost entries are needed
-        self.v.x.scatter_forward()
+        self.fields["v"].x.scatter_forward()
         # use v.x instead of v.vector, since mesh update requires ghost entries
-        du_half = (0.5 * self.del_t) * self.v.vector.array
+        du_half = (0.5 * self.del_t) * self.fields["v"].x.array
 
         set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
-        if self.nonlocal_var is not None:
-            self.nonlocal_var.step(
-                self.del_t, self.law.get_internal_var(self.nonlocal_var.Q_local)
-            )
+        #if self.nonlocal_var is not None:
+        #    self.nonlocal_var.step(
+        #        self.del_t, self.law.get_internal_var(self.nonlocal_var.Q_local)
+        #    )
         self.stress_update(self.del_t)
 
-        self.u.x.array[:] += 2.0 * du_half
+        self.fields["u"].x.array[:] += 2.0 * du_half
 
         set_mesh_coordinates(self.mesh, du_half, mode="add")
 
