@@ -150,7 +150,7 @@ pub fn jaumann_rotation(
                 + FACTOR * (stress_i.w * differences[1] + stress_i.a * differences[2]));
     }
 }
-//TODO
+
 pub fn jaumann_rotation_expensive(
     del_t: f64,
     velocity_gradient: &DVectorView<f64>,
