@@ -287,11 +287,43 @@ impl PyLinearElastic3D {
         Ok(())
     }
 }
+#[pyfunction(name="jaumann_rotation")]
+fn py_jaumann_rotation(
+    del_t: f64,
+    velocity_gradient: PyReadonlyArray1<f64>,
+    stress: PyReadwriteArray1<f64>,
+) -> PyResult<()> {
+    let mut velocity_gradient = velocity_gradient
+        .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    let mut stress = stress
+        .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    stress_strain::jaumann_rotation(del_t, &velocity_gradient, &mut stress);
+    Ok(())
+}
+#[pyfunction(name="jaumann_rotation_expensive")]
+fn py_jaumann_rotation_expensive(
+    del_t: f64,
+    velocity_gradient: PyReadonlyArray1<f64>,
+    stress: PyReadwriteArray1<f64>,
+) -> PyResult<()> {
+    let mut velocity_gradient = velocity_gradient
+        .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    let mut stress = stress
+        .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    stress_strain::jaumann_rotation_expensive(del_t, &velocity_gradient, &mut stress);
+    Ok(())
+}
 
 #[pymodule]
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
     impl_constitutive_model!(PyJH23D, JH23D, m);
     impl_constitutive_model!(PyLinElas3D, LinearElastic3D, m);
+    m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
+    m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
     Ok(())
 }

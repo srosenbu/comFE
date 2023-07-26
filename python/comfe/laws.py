@@ -3,8 +3,20 @@ import dolfinx as df
 from pydantic import BaseModel
 import numpy as np
 from .helpers import QuadratureRule
+from abc import abstractmethod, ABC
 
 RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D
+
+class QuadratureModel(ABC):
+    @abstractmethod
+    def evaluate(self, del_t:float = 1.) -> None:
+        pass
+    @abstractmethod
+    def evaluate_some(self, del_t:float = 1.) -> None:
+        pass
+    @abstractmethod
+    def update(self) -> None:
+        pass
 
 class ConstitutiveModel(BaseModel):
     _rs_object: RustConstitutiveModel
@@ -55,15 +67,15 @@ def ceate_input_and_output(
     outputs = model.define_output()
     optional_outputs = dict(filter(lambda item:item[0] in optional_output, model.define_optional_output().items()))
     spaces = {} if spaces is None else spaces
-    input_dict, spaces = _create_spaces(inputs, rule, mesh, spaces)
-    output_dict, spaces= _create_spaces(outputs, rule, mesh, spaces)
-    optional_output_dict, spaces  = _create_spaces(optional_outputs, rule, mesh, spaces)
+    input_dict, spaces = _spaces_from_dict(inputs, rule, mesh, spaces)
+    output_dict, spaces= _spaces_from_dict(outputs, rule, mesh, spaces)
+    optional_output_dict, spaces  = _spaces_from_dict(optional_outputs, rule, mesh, spaces)
     output_dict.update(optional_output_dict)
     return input_dict, output_dict, spaces
 
     
 
-def _create_spaces(
+def _spaces_from_dict(
         definition: dict[str, int | tuple[int,int]],
         rule: QuadratureRule,
         mesh:df.mesh.Mesh,

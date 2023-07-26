@@ -86,6 +86,7 @@ impl<'a> QValueInput<'a> {
         SVector::<f64, SIZE>::from_column_slice(self.get_slice::<SIZE>(q, i))
     }
     pub fn get_tensor<const DIM: usize, const SIZE: usize>(&self, q:Q, i:usize) -> SMatrix<f64, DIM,DIM> {
+        //TODO: This is hardcoded to row-major layout in FEniCSx
         SMatrix::<f64, DIM, DIM>::from_row_slice(self.get_slice::<{SIZE}>(q, i))
     }
     pub fn get_slice<const SIZE: usize>(&self, q: Q, i: usize) -> &[f64] {
