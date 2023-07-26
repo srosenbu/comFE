@@ -1,4 +1,4 @@
-from pycomfe.comfe import PyLinElas3D, PyJH23D, PyLinearElastic3D
+from .comfe import PyLinElas3D, PyJH23D, PyLinearElastic3D
 import dolfinx as df
 from pydantic import BaseModel
 import numpy as np
@@ -87,15 +87,15 @@ def _spaces_from_dict(
         if isinstance(value, tuple):
             if key not in spaces:
                 spaces[key] = rule.create_quadrature_tensor_space(mesh, value)
-            q_values_dict[key] = df.fem.Function(spaces[key])
+            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
         elif isinstance(value, int) and value > 1:
             if key not in spaces:
                 spaces[key] = rule.create_quadrature_vector_space(mesh, value)
-            q_values_dict[key] = df.fem.Function(spaces[key])
+            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
         elif value == 1:
             if key not in spaces:
                 spaces[key] = rule.create_quadrature_space(mesh)
-            q_values_dict[key] = df.fem.Function(spaces[key])
+            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
 
     return q_values_dict, spaces
 
