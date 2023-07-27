@@ -19,10 +19,10 @@ from typing import Callable
 
 
 class CDMX3D(BaseModel):
-    function_space : df.fem.FunctionSpace
+    function_space: df.fem.FunctionSpace
     t: float
     del_t: float
-    #rule: QuadratureRule
+    # rule: QuadratureRule
     external_forces: Callable
     f_int_form: df.fem.FormMetaClass
     L_evaluator: QuadratureEvaluator
@@ -42,17 +42,18 @@ class CDMX3D(BaseModel):
         M: df.fem.Function,
         rust_model: RustConstitutiveModel,
         quadrature_rule: QuadratureRule,
-        nonlocal_var : NonlocalInterface | None = None,
-        #damping: float | None=None,
+        nonlocal_var: NonlocalInterface | None = None,
+        # damping: float | None=None,
     ):
         self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
         u = df.fem.Function(function_space, name="Displacements")
         f = df.fem.Function(function_space, name="Forces")
 
+        model = ConstitutiveModel(
+            rust_model, quadrature_rule, function_space.mesh, None, []
+        )
 
-        model = ConstitutiveModel(rust_model, quadrature_rule, function_space.mesh, None, [])
-        
         stress = model["mandel_stress"]
 
         test_function = ufl.TestFunction(function_space)
@@ -73,7 +74,20 @@ class CDMX3D(BaseModel):
             quadrature_rule,
         )
 
-        super().__init__(function_space=function_space, t=t0, del_t=0.,  external_forces=f_ext, f_int_form=f_int_form, bcs=bcs, L_evaluator=L_evaluator, model=model, M=M, nonlocal_var=nonlocal_var, fields={"u": u, "v": v, "f": f}, q_fields=model._output)
+        super().__init__(
+            function_space=function_space,
+            t=t0,
+            del_t=0.0,
+            external_forces=f_ext,
+            f_int_form=f_int_form,
+            bcs=bcs,
+            L_evaluator=L_evaluator,
+            model=model,
+            M=M,
+            nonlocal_var=nonlocal_var,
+            fields={"u": u, "v": v, "f": f},
+            q_fields=model._output,
+        )
 
     def _as_mandel(self, T: ufl.core.expr.Expr):
         """
@@ -101,7 +115,7 @@ class CDMX3D(BaseModel):
 
         jaumann_rotation(h, L, sigma)
 
-        #if self.nonlocal_var is not None:
+        # if self.nonlocal_var is not None:
         #    input_list[
         #        self.nonlocal_var.Q_nonlocal
         #    ] = self.nonlocal_var.get_quadrature_values()
@@ -110,7 +124,7 @@ class CDMX3D(BaseModel):
         self.model.evaluate(h)
         self.model.update()
         # TODO
-        #self.stress.x.scatter_forward()
+        # self.stress.x.scatter_forward()
 
     def step(self, h):
         del_t_mid = (h + self.del_t) / 2.0 if self.del_t is not None else h
@@ -126,7 +140,9 @@ class CDMX3D(BaseModel):
         )
 
         if self.external_forces is not None:
-            self.fields["f"].vector.array[:] += self.external_forces(self.t).vector.array
+            self.fields["f"].vector.array[:] += self.external_forces(
+                self.t
+            ).vector.array
             # TODO
             self.fields["f"].vector.ghostUpdate(
                 addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD
@@ -134,14 +150,16 @@ class CDMX3D(BaseModel):
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
         # Advance velocities and nodal positions in time
-        #if self.damping is None:
+        # if self.damping is None:
         #    c1 = 1.0
         #    c2 = del_t_mid
-        #else:
+        # else:
         #    c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
         #    c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
 
-        self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
+        self.fields["v"].vector.array[:] += (
+            del_t_mid * self.M.vector.array * self.fields["f"].vector.array
+        )
 
         df.fem.set_bc(self.fields["v"].vector, self.bcs)
         # ghost entries are needed
@@ -150,7 +168,7 @@ class CDMX3D(BaseModel):
         du_half = (0.5 * self.del_t) * self.fields["v"].x.array
 
         set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
-        #if self.nonlocal_var is not None:
+        # if self.nonlocal_var is not None:
         #    self.nonlocal_var.step(
         #        self.del_t, self.law.get_internal_var(self.nonlocal_var.Q_local)
         #    )
@@ -189,18 +207,19 @@ class CDMPlaneStrainX(CDMX3D):
             ]
         )
 
+
 class NonlocalInterface:
     def __init__(self, Q_local: str, Q_nonlocal: str):
         self.Q_local = Q_local
         self.Q_nonlocal = Q_nonlocal
 
-    def step(self, h: float, p_l: np.ndarray)->None:
+    def step(self, h: float, p_l: np.ndarray) -> None:
         raise NotImplementedError("step() needs to be implemented.")
 
-    def get_quadrature_values(self)->np.ndarray:
+    def get_quadrature_values(self) -> np.ndarray:
         raise NotImplementedError("get_quadrature_values needs to be implemented.")
 
-    def get_nodal_values(self)->np.ndarray:
+    def get_nodal_values(self) -> np.ndarray:
         raise NotImplementedError("get_nodal_values needs to be implemented.")
 
 
@@ -259,6 +278,7 @@ class ImplicitNonlocalVariable(NonlocalInterface):
     def get_nodal_values(self):
         return self.p_nl
 
+
 # class ExplicitNonlocalVariable(NonlocalInterface):
 #     """This class should work with all constraints"""
 
@@ -315,6 +335,7 @@ class ImplicitNonlocalVariable(NonlocalInterface):
 #     def get_quadrature_values(self):
 #         return self.p_nl_q
 
+
 #     def get_nodal_values(self):
 #         return self.p_nl
 class CDMNonlocalVariable(NonlocalInterface):
@@ -350,7 +371,7 @@ class CDMNonlocalVariable(NonlocalInterface):
 
         test_function = ufl.TestFunction(function_space)
         f_int_ufl = (
-            self.l ** 2 * ufl.inner(ufl.grad(self.p_nl), ufl.grad(test_function))
+            self.l**2 * ufl.inner(ufl.grad(self.p_nl), ufl.grad(test_function))
             + self.p_nl * test_function
         ) * self.quadrature_rule.dx
         f_ext_ufl = self.p_l * test_function * self.quadrature_rule.dx
@@ -361,21 +382,21 @@ class CDMNonlocalVariable(NonlocalInterface):
         self.f = self.p_nl.vector.copy()
         self.delta_t = dfx.fem.Constant(self.mesh, 0.0)
         # self.p_evaluator = QuadratureEvaluator(
-            # self.delta_t * self.dp_nl, self.mesh, self.quadrature_rule
+        # self.delta_t * self.dp_nl, self.mesh, self.quadrature_rule
         # )
         self.p_evaluator = QuadratureEvaluator(
             self.p_nl, self.mesh, self.quadrature_rule
         )
-    #@profile
+
+    # @profile
     def _substep(self, h):
-        #we assume that in the last step, the substeps were the same
-        #(otherwise, we would need to adapt \Delta t_{n+1/2})
+        # we assume that in the last step, the substeps were the same
+        # (otherwise, we would need to adapt \Delta t_{n+1/2})
         with self.f.localForm() as f_local:
             f_local.set(0.0)
 
         self.f.ghostUpdate()
-        #self.delta_t.value = h
-
+        # self.delta_t.value = h
 
         dfx.fem.petsc.assemble_vector(self.f, self.f_form)
         self.f.ghostUpdate()
@@ -388,10 +409,11 @@ class CDMNonlocalVariable(NonlocalInterface):
             self.dp_nl, c1 * get_local(self.dp_nl) + c2 * self.M.array * self.f.array
         )
         add_local(self.p_nl, h * get_local(self.dp_nl))
-    #@profile
+
+    # @profile
     def step(self, h, p, substeps=1):
-        h_sub = h/substeps
-        #we assume that the local plastic strain is constant on all substeps
+        h_sub = h / substeps
+        # we assume that the local plastic strain is constant on all substeps
         set_local(self.p_l, p)
         for i in range(substeps):
             self._substep(h_sub)
