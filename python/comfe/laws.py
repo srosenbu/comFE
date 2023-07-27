@@ -29,6 +29,8 @@ class ConstitutiveModel(BaseModel):
     _ips: np.ndarray[np.uint64] | None = None
     _spaces: dict[int | tuple[int, int], df.fem.FunctionSpace]
 
+    class Config:
+        arbitrary_types_allowed = True
     def __init__(
         self,
         model: RustConstitutiveModel,

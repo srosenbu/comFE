@@ -200,6 +200,7 @@ pub trait ConstitutiveModel {
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed
     fn define_output(&self) -> HashMap<Q, QDim>;
+    //Mainly for the purpose of telling Python what extra output can be provided
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::new()
     }
