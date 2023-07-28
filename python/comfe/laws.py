@@ -23,11 +23,11 @@ class QuadratureModel(ABC):
 
 
 class ConstitutiveModel(BaseModel):
-    _rs_object: RustConstitutiveModel
-    _input: dict[str, df.fem.Function]
-    _output: dict[str, df.fem.Function]
-    _ips: np.ndarray[np.uint64] | None = None
-    _spaces: dict[int | tuple[int, int], df.fem.FunctionSpace]
+    rs_object: RustConstitutiveModel
+    input: dict[str, df.fem.Function]
+    output: dict[str, df.fem.Function]
+    ips: np.ndarray[np.uint64] | None = None
+    spaces: dict[int | tuple[int, int], df.fem.FunctionSpace]
 
     class Config:
         arbitrary_types_allowed = True
@@ -43,25 +43,26 @@ class ConstitutiveModel(BaseModel):
             model, rule, mesh, None, additional_output
         )
         super().__init__(
-            _rs_object=model, _input=input, _output=output, _ips=ips, _spaces=spaces
+            rs_object=model, input=input, output=output, ips=ips, spaces=spaces
         )
 
     def evaluate(self, del_t=1.0) -> None:
-        input = {key: value.vector.array for key, value in self._input.items()}
-        output = {key: value.vector.array for key, value in self._output.items()}
-        self._rs_object.evaluate(del_t, input, output)
+        input = {key: value.vector.array for key, value in self.input.items()}
+        output = {key: value.vector.array for key, value in self.output.items()}
+        self.rs_object.evaluate(del_t, input, output)
 
     def evaluate_some(self, del_t=1.0) -> None:
-        input = {key: value.vector.array for key, value in self._input.items()}
-        output = {key: value.vector.array for key, value in self._output.items()}
-        self._rs_object.evaluate_some(del_t, self._ips, input, output)
+        input = {key: value.vector.array for key, value in self.input.items()}
+        output = {key: value.vector.array for key, value in self.output.items()}
+        self.rs_object.evaluate_some(del_t, self.ips, input, output)
 
     def update(self) -> None:
-        for key, function in self._input.items():
-            function.vector.array[:] = self._output[key].vector.array
+        keys = set(self.input.keys()).intersection(set(self.output.keys()))
+        for key in keys:
+            self.input[key].vector.array[:] = self.output[key].vector.array
 
     def __getitem__(self, key: str) -> np.ndarray:
-        return self._output[key]
+        return self.output[key]
 
 
 def ceate_input_and_output(
@@ -77,17 +78,20 @@ def ceate_input_and_output(
 ]:
     inputs = model.define_input()
     outputs = model.define_output()
-    optional_outputs = dict(
-        filter(
-            lambda item: item[0] in optional_output,
-            model.define_optional_output().items(),
+    if optional_output is None:
+        optional_output = {}
+    else:
+        optional_output = dict(
+            filter(
+                lambda item: item[0] in optional_output,
+                model.define_optional_output().items(),
+            )
         )
-    )
     spaces = {} if spaces is None else spaces
     input_dict, spaces = _spaces_from_dict(inputs, rule, mesh, spaces)
     output_dict, spaces = _spaces_from_dict(outputs, rule, mesh, spaces)
     optional_output_dict, spaces = _spaces_from_dict(
-        optional_outputs, rule, mesh, spaces
+        optional_output, rule, mesh, spaces
     )
     output_dict.update(optional_output_dict)
     return input_dict, output_dict, spaces
@@ -103,15 +107,15 @@ def _spaces_from_dict(
     for key, value in definition.items():
         if isinstance(value, tuple):
             if key not in spaces:
-                spaces[key] = rule.create_quadrature_tensor_space(mesh, value)
-            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
+                spaces[value] = rule.create_quadrature_tensor_space(mesh, value)
+            q_values_dict[key] = df.fem.Function(spaces[value], name=key)
         elif isinstance(value, int) and value > 1:
             if key not in spaces:
-                spaces[key] = rule.create_quadrature_vector_space(mesh, value)
-            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
+                spaces[value] = rule.create_quadrature_vector_space(mesh, value)
+            q_values_dict[key] = df.fem.Function(spaces[value], name=key)
         elif value == 1:
             if key not in spaces:
-                spaces[key] = rule.create_quadrature_space(mesh)
-            q_values_dict[key] = df.fem.Function(spaces[key], name=key)
+                spaces[value] = rule.create_quadrature_space(mesh)
+            q_values_dict[key] = df.fem.Function(spaces[value], name=key)
 
     return q_values_dict, spaces

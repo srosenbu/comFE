@@ -57,7 +57,7 @@ pub fn mandel_decomposition(mandel: &SVector<f64, 6>) -> (f64, SVector<f64, 6>) 
     let p = volumetric(mandel);
     let mut dev = mandel.clone();
     add_volumetric(&mut dev, -p);
-    (p, dev)
+    (-p, dev)
 }
 
 pub fn mandel_rate_from_velocity_gradient(

@@ -134,6 +134,8 @@ with ones.vector.localForm() as ones_local:
     ones_local.set(1.0)
 M_action = M * ones.vector
 #del M, ones
+M_function = dfx.fem.Function(P1)
+M_function.vector.array[:] = M_action.array
 
 
 M_action.array[:] = 1./M_action.array
@@ -141,7 +143,7 @@ M_action.ghostUpdate()
 
 #print("1")
 solver = co.cdm.CDMPlaneStrainX(
-    P1, 0, None, bcs, M_action, law, rule
+    P1, 0, None, bcs, M_function, law, rule
 )
 
 #print("1")
@@ -150,16 +152,16 @@ p_ = []
 del_p = []
 damage =[]
 counter = 0
-total_mass = 1000.0**2 * parameters.RHO
+total_mass = 1000.0**2 * parameters["RHO"]
 while solver.t < t_end:# and counter <= 2000:
     solver.step(h)
     if counter % 100 == 0:
-        u_ = max(abs(get_local(solver.u)))
+        u_ = max(abs(solver.fields["u"].vector.array))
 
         density = total_mass / (1000 * (1000.-u_))
-        #print((density-law.get_internal_var(cx.Q.RHO)[0])/density)
+        print((density-solver.q_fields["density"].vector.array[0])/density)
 
-        s_mean =  np.mean(get_local(solver.stress).reshape((-1,6)), axis = 0)
+        s_mean =  np.mean(solver.q_fields["mandel_stress"].vector.array.reshape((-1,6)), axis = 0)
         p = - (1/3) * np.sum(s_mean[:3])
         #print("###\n",get_local(solver.u))
         #print(get_local(solver.v),"###")
@@ -182,12 +184,12 @@ solver.bcs = bcs
 while solver.t < 2.*t_end:# and counter <= 2000:
     solver.step(h)
     if counter % 100 == 0:
-        u_ = max(abs(get_local(solver.u)))
+        u_ = max(abs(solver.fields["u"].vector.array))
 
         density = total_mass / (1000 * (1000.-u_))
         #print((density-law.get_internal_var(cx.Q.RHO)[0])/density)
 
-        s_mean =  np.mean(get_local(solver.stress).reshape((-1,6)), axis = 0)
+        s_mean =  np.mean(solver.q_fields["mandel_stress"].vector.array.reshape((-1,6)), axis = 0)
         p = - (1/3) * np.sum(s_mean[:3])
         #print("###\n",get_local(solver.u))
         #print(get_local(solver.v),"###")

@@ -36,7 +36,7 @@ class CDMX3D(BaseModel):
     t: float
     del_t: float
     # rule: QuadratureRule
-    external_forces: Callable
+    external_forces: Callable | None = None
     f_int_form: df.fem.FormMetaClass
     L_evaluator: QuadratureEvaluator
     bcs: list[df.fem.DirichletBCMetaClass]
@@ -61,13 +61,13 @@ class CDMX3D(BaseModel):
         nonlocal_var: NonlocalInterface | None = None,
         # damping: float | None=None,
     ):
-        self.del_t = None
+        #self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
         u = df.fem.Function(function_space, name="Displacements")
         f = df.fem.Function(function_space, name="Forces")
 
         model = ConstitutiveModel(
-            rust_model, quadrature_rule, function_space.mesh, None, []
+            rust_model, quadrature_rule, function_space.mesh, None, None,
         )
 
         stress = model["mandel_stress"]
@@ -85,7 +85,7 @@ class CDMX3D(BaseModel):
         f_int_form = df.fem.form(f_int_ufl)
 
         L_evaluator = QuadratureEvaluator(
-            ufl.nabla_grad(v),
+            self._as_3d_tensor(ufl.nabla_grad(v)),
             function_space.mesh,
             quadrature_rule,
         )
@@ -102,8 +102,10 @@ class CDMX3D(BaseModel):
             M=M,
             nonlocal_var=nonlocal_var,
             fields={"u": u, "v": v, "f": f},
-            q_fields=model._output,
+            q_fields=model.output,
         )
+    def _as_3d_tensor(self, T: ufl.core.expr.Expr):
+        return T
 
     def _as_mandel(self, T: ufl.core.expr.Expr):
         """
@@ -125,11 +127,11 @@ class CDMX3D(BaseModel):
         )
 
     def stress_update(self, h):
-        L = self.model._input["velocity_gradient"].vector.array
-        sigma = self.model._input["mandel_stress"].vector.array
-        self.L_evaluator(self.L)
+        L = self.model.input["velocity_gradient"]
+        sigma = self.model.input["mandel_stress"]
+        self.L_evaluator(L)
 
-        jaumann_rotation(h, L, sigma)
+        jaumann_rotation(h, L.vector.array, sigma.vector.array)
 
         # if self.nonlocal_var is not None:
         #    input_list[
@@ -191,13 +193,13 @@ class CDMX3D(BaseModel):
 
         self.fields["u"].x.array[:] += 2.0 * du_half
 
-        set_mesh_coordinates(self.mesh, du_half, mode="add")
+        set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
 
         self.t += self.del_t
 
 
 class CDMPlaneStrainX(CDMX3D):
-    def __2d_tensor_to_3d(self, T):
+    def _as_3d_tensor(self, T):
         return ufl.as_matrix(
             [[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]]
         )
@@ -209,7 +211,7 @@ class CDMPlaneStrainX(CDMX3D):
         Returns:
             Vector representation of T with factor sqrt(2) for off diagonal components
         """
-        T3d = self.__2d_tensor_to_3d(T)
+        T3d = self._as_3d_tensor(T)
         factor = 2**0.5
         return ufl.as_vector(
             [
