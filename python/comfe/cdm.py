@@ -17,6 +17,7 @@ from .laws import RustConstitutiveModel, ConstitutiveModel
 from .comfe import jaumann_rotation
 from typing import Callable
 
+
 class NonlocalInterface:
     def __init__(self, Q_local: str, Q_nonlocal: str):
         self.Q_local = Q_local
@@ -30,6 +31,7 @@ class NonlocalInterface:
 
     def get_nodal_values(self) -> np.ndarray:
         raise NotImplementedError("get_nodal_values needs to be implemented.")
+
 
 class CDMX3D(BaseModel):
     function_space: df.fem.FunctionSpace
@@ -59,15 +61,19 @@ class CDMX3D(BaseModel):
         rust_model: RustConstitutiveModel,
         quadrature_rule: QuadratureRule,
         nonlocal_var: NonlocalInterface | None = None,
-        # damping: float | None=None,
+        additional_output: list[str] | None = None,
     ):
-        #self.del_t = None
+        # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
         u = df.fem.Function(function_space, name="Displacements")
         f = df.fem.Function(function_space, name="Forces")
 
         model = ConstitutiveModel(
-            rust_model, quadrature_rule, function_space.mesh, None, None,
+            rust_model,
+            quadrature_rule,
+            function_space.mesh,
+            None,
+            additional_output,
         )
 
         stress = model["mandel_stress"]
@@ -104,6 +110,7 @@ class CDMX3D(BaseModel):
             fields={"u": u, "v": v, "f": f},
             q_fields=model.output,
         )
+
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
         return T
 
@@ -223,8 +230,6 @@ class CDMPlaneStrainX(CDMX3D):
                 factor * T3d[0, 1],
             ]
         )
-
-
 
 
 # class ImplicitNonlocalVariable(NonlocalInterface):

@@ -116,14 +116,10 @@ impl ConstitutiveModel for JH23D {
         //  * The density is updated using the explicit midpoint rule for the
         //  * deformation gradient.
         //  TODO: Move this since, it will be calculated outside of the constitutive model
-        //        Also, it does not seem to be 100% correct
         //  **********************************************************************/
-        //let factor_1 = SMatrix::<f64, 3, 3>::identity() + 0.5 * del_t * velocity_gradient;
-        //let factor_2 = SMatrix::<f64, 3, 3>::identity() - 0.5 * del_t * velocity_gradient;
         let f1 = del_t / 2. * velocity_gradient.trace();
         let density_0 = input.get_scalar(Q::Density, ip);
-        let density_1 = density_0 * (1. + f1) / (1. - f1);
-        //let density_1 = density_0 * factor_1.determinant() / factor_2.determinant();
+        let density_1 = density_0 * (1. - f1) / (1. + f1);
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.RHO - 1.;
@@ -136,9 +132,6 @@ impl ConstitutiveModel for JH23D {
                     + self.parameters.K2 * mu.powi(2)
                     + self.parameters.K3 * mu.powi(3)
                     + input.get_scalar(Q::BulkingPressure, ip)
-
-                //del_p_0 = input.get_scalar(Q::Pressure, ip) - p_init;
-                //p_init + del_p_0
             } else {
                 (self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
             }

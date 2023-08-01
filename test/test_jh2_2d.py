@@ -416,7 +416,7 @@ case_3a = {"parameters": case3a_parameters, "points": case3a_points}
         case_3a,
     ],
 )
-def test_single_element_2d(test_case: dict) -> None:
+def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     mesh = dfx.mesh.create_rectangle(
         MPI.COMM_WORLD,
         np.array([[0, 0], [1000.0, 1000.0]]),
@@ -436,7 +436,7 @@ def test_single_element_2d(test_case: dict) -> None:
     P1 = dfx.fem.VectorFunctionSpace(mesh, ("CG", 1))
     u = dfx.fem.Function(P1)
     t_end = 100.0
-    v_bc = 50.0 / t_end
+    v_bc = -50.0 / t_end
     domains = [
         lambda x: np.isclose(x[0], 0.0),
         lambda x: np.isclose(x[0], 1000.0),
@@ -467,7 +467,7 @@ def test_single_element_2d(test_case: dict) -> None:
     u_ = ufl.TrialFunction(P1)
 
 
-    h = 1e-1 
+    h = 1e-2 
 
     mass_form = ufl.inner(u_, v_) * parameters["RHO"] * ufl.dx
 
@@ -485,20 +485,21 @@ def test_single_element_2d(test_case: dict) -> None:
     M_action.ghostUpdate()
 
     solver = co.cdm.CDMPlaneStrainX(P1, 0, None, bcs, M_function, law, rule, additional_output=["mises_stress", "pressure"])
-    solver.model.input["density"].vector.array[:] = parameters["RHO"]
-    solver.model.output["density"].vector.array[:] = parameters["RHO"]
+    solver.model.input["density"].vector.array[:] += parameters["RHO"]
+    solver.model.output["density"].vector.array[:] += parameters["RHO"]
     s_eq_ = []
     p_ = []
     #del_p = []
     #damage = []
     #counter = 0
-    #total_mass = 1000.0**2 * parameters["RHO"]
+    total_mass = 1000.0**2 * parameters["RHO"]
     while solver.t < t_end:  # and counter <= 2000:
         solver.step(h)
-        #u_ = max(abs(solver.fields["u"].vector.array))
+        u_ = max(abs(solver.fields["u"].vector.array))
 
-        #density = total_mass / (1000 * (1000.0 - u_))
-
+        density = total_mass / (1000 * (1000.0 - u_))
+        #print(solver.fields["u"].vector.array)
+        #print("densities:",(density-solver.q_fields["density"].vector.array[0])/density)
         #s_mean = np.mean(
         #    solver.q_fields["mandel_stress"].vector.array.reshape((-1, 6)), axis=0
         #)
@@ -510,7 +511,7 @@ def test_single_element_2d(test_case: dict) -> None:
     
     values = [0.0, 0.0, 0.0, -v_bc]
     subspaces = [0, 0, 1, 1]
-
+    #sys.exit()
     bcs = [
         dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i))
         for value, dofs, i in zip(values, bc_dofs, subspaces)
@@ -518,10 +519,10 @@ def test_single_element_2d(test_case: dict) -> None:
     solver.bcs = bcs
     while solver.t < 2.0 * t_end:  # and counter <= 2000:
         solver.step(h)
-        #u_ = max(abs(solver.fields["u"].vector.array))
+        u_ = max(abs(solver.fields["u"].vector.array))
 
-        #density = total_mass / (1000 * (1000.0 - u_))
-
+        density = total_mass / (1000 * (1000.0 - u_))
+        
         #s_mean = np.mean(
         #    solver.q_fields["mandel_stress"].vector.array.reshape((-1, 6)), axis=0
         #)
@@ -537,16 +538,23 @@ def test_single_element_2d(test_case: dict) -> None:
     points = np.hstack((p_, s_eq_))
     tree = KDTree(points)
     distances = tree.query(test_case["points"])
-    assert np.mean(distances[0]/np.max(np.abs(test_case["points"][:,1]))) < 0.15
+    assert np.mean(distances[0]/np.max(np.abs(test_case["points"][:,1]))) < 0.1
     #for p, mises in test_case["points"]:
     #    index = tree.query(p)
     #    assert np.isclose(p, y_i(x, parameters))
     #    assert np.isclose(s_eq, y_f(x, parameters))
+    if plot is not None:
+        p_debug = np.linspace(0.0, 8.0, 100)
+        plt.plot(p_debug, y_i(p_debug, parameters))
+        plt.plot(p_debug, y_f(p_debug, parameters))
+        plt.plot(p_, s_eq_)
+        plt.scatter(test_case["points"][:,0], test_case["points"][:,1])
+        plt.xlabel("Pressure [GPa]")
+        plt.ylabel("Equiv. Stress [GPa]")
+        plt.title(f"JH2 test")
+        plt.savefig(f"{plot}.png")
+        plt.clf()
 
-    #p_debug = np.linspace(0.0, 8.0, 100)
-    #plt.plot(p_debug, y_i(p_debug, parameters))
-    #plt.plot(p_debug, y_f(p_debug, parameters))
-    #plt.plot(p_, s_eq_)
-    #plt.xlabel("Pressure [GPa]")
-    #plt.ylabel("Equiv. Stress [GPa]")
-    #plt.savefig("jh2.png")
+if __name__ == "__main__":
+    test_single_element_2d(case_3a, plot="jh2_case_3a")
+    test_single_element_2d(case_1, plot="jh2_case_1")
