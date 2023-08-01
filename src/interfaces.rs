@@ -25,6 +25,8 @@ pub enum Q {
     Density,
     #[strum(serialize = "Pressure", serialize = "pressure")]
     Pressure,
+    #[strum(serialize = "BulkingPressure", serialize = "bulking_pressure")]
+    BulkingPressure,
     #[strum(serialize = "Damage", serialize = "damage")]
     Damage,
     #[strum(serialize = "StrainRateNorm", serialize = "strain_rate_norm")]
@@ -177,6 +179,7 @@ impl Q {
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,
+            Q::BulkingPressure => QDim::Scalar,
             Q::Damage => QDim::Scalar,
             Q::StrainRateNorm => QDim::Scalar,
             Q::EquivalentPlasticStrain => QDim::Scalar,
@@ -204,6 +207,7 @@ pub trait ConstitutiveModel {
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::new()
     }
+    //fn initialize(&mut self, input: &QValueInput, output: &mut QValueOutput);
 
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput);
     fn evaluate(&self, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {

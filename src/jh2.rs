@@ -95,7 +95,7 @@ impl ConstitutiveModel for JH23D {
             if damage_0 == 0.0 {
                 fracture_surface
             } else {
-                fracture_surface * (1. - damage_0) + damage_0 * fracture_surface
+                fracture_surface * (1. - damage_0) + damage_0 * residual_surface
             }
         };
         if s_tr_eq > yield_surface {
@@ -116,37 +116,47 @@ impl ConstitutiveModel for JH23D {
         //  * The density is updated using the explicit midpoint rule for the
         //  * deformation gradient.
         //  TODO: Move this since, it will be calculated outside of the constitutive model
+        //        Also, it does not seem to be 100% correct
         //  **********************************************************************/
+        //let factor_1 = SMatrix::<f64, 3, 3>::identity() + 0.5 * del_t * velocity_gradient;
+        //let factor_2 = SMatrix::<f64, 3, 3>::identity() - 0.5 * del_t * velocity_gradient;
         let f1 = del_t / 2. * velocity_gradient.trace();
-        let density_1 = input.get_scalar(Q::Density, ip) * (1. + f1) / (1. - f1);
+        let density_0 = input.get_scalar(Q::Density, ip);
+        let density_1 = density_0 * (1. + f1) / (1. - f1);
+        //let density_1 = density_0 * factor_1.determinant() / factor_2.determinant();
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.RHO - 1.;
-
+        
+        //let mut del_p_0 = 0.0;
+        
         let p = {
             if mu > 0.0 {
                 self.parameters.K1 * mu
                     + self.parameters.K2 * mu.powi(2)
                     + self.parameters.K3 * mu.powi(3)
-                    + input.get_scalar(Q::Pressure, ip)
+                    + input.get_scalar(Q::BulkingPressure, ip)
+
+                //del_p_0 = input.get_scalar(Q::Pressure, ip) - p_init;
+                //p_init + del_p_0
             } else {
                 (self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
             }
         };
-        if damage_1 > damage_0 && self.parameters.BETA > 0.0 {
-            let y_old = (damage_0 * residual_surface + (1. - damage_0) * fracture_surface);
-            let y_new = (damage_1 * residual_surface + (1. - damage_1) * fracture_surface);
-            let u_old = (y_old * y_old) / (6. * self.parameters.SHEAR_MODULUS);
-            let u_new = (y_new * y_new) / (6. * self.parameters.SHEAR_MODULUS);
+        if damage_1 > damage_0 {
+            let y_old = damage_0 * residual_surface + (1. - damage_0) * fracture_surface;
+            let y_new = damage_1 * residual_surface + (1. - damage_1) * fracture_surface;
+            let u_old = y_old.powi(2) / (6. * self.parameters.SHEAR_MODULUS);
+            let u_new = y_new.powi(2) / (6. * self.parameters.SHEAR_MODULUS);
 
             let del_u = u_old - u_new;
 
-            let del_p_n = input.get_scalar(Q::Pressure, ip) - p;
+            let del_p_0 = input.get_scalar(Q::BulkingPressure, ip);
             let del_p = -self.parameters.K1 * mu
-                + ((self.parameters.K1 * mu + del_p_n).powi(2)
+                + ((self.parameters.K1 * mu + del_p_0).powi(2)
                     + 2. * self.parameters.BETA * self.parameters.K1 * del_u)
                     .sqrt();
-            output.set_scalar(Q::Pressure, ip, del_p);
+            output.set_scalar(Q::BulkingPressure, ip, del_p);
         }
 
         // /***********************************************************************
@@ -170,6 +180,9 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::MisesStress) {
             output.set_scalar(Q::MisesStress, ip, alpha * s_tr_eq);
         }
+        if output.is_some(Q::Pressure) {
+            output.set_scalar(Q::Pressure, ip, p);
+        }
     }
 
     fn define_input(&self) -> HashMap<Q, QDim> {
@@ -177,7 +190,7 @@ impl ConstitutiveModel for JH23D {
             (Q::VelocityGradient, QDim::SquareTensor(3)),
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
-            (Q::Pressure, QDim::Scalar),
+            (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
         ])
     }
@@ -186,7 +199,7 @@ impl ConstitutiveModel for JH23D {
         HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
-            (Q::Pressure, QDim::Scalar),
+            (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
         ])
     }
@@ -197,6 +210,7 @@ impl ConstitutiveModel for JH23D {
             (Q::StrainRateNorm, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
+            (Q::Pressure, QDim::Scalar),
         ])
     }
 }
