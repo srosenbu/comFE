@@ -223,20 +223,46 @@ impl PyLinearElastic3D {
             .unwrap()
             .extract::<f64>()
             .expect("Failed to read poisson ratio from Python");
-        let c1 = E / (1.0 + nu) / (1.0 - 2.0 * nu);
-        let c2 = c1 * (1.0 - nu);
-        D[(0, 0)] = c2;
-        D[(1, 1)] = c2;
-        D[(2, 2)] = c2;
-        D[(0, 1)] = E * nu / (1.0 - nu);
-        D[(0, 2)] = E * nu / (1.0 - nu);
-        D[(1, 0)] = E * nu / (1.0 - nu);
-        D[(1, 2)] = E * nu / (1.0 - nu);
-        D[(2, 0)] = E * nu / (1.0 - nu);
-        D[(2, 1)] = E * nu / (1.0 - nu);
-        D[(3, 3)] = c1;
-        D[(4, 4)] = c1;
-        D[(5, 5)] = c1;
+        let mu = E / (2.0 * (1.0 + nu));
+        let lambda = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+        let D = SMatrix::<f64, 6, 6>::new(
+            lambda + 2.0 * mu,
+            lambda,
+            lambda,
+            0.0,
+            0.0,
+            0.0,
+            lambda,
+            lambda + 2.0 * mu,
+            lambda,
+            0.0,
+            0.0,
+            0.0,
+            lambda,
+            lambda,
+            lambda + 2.0 * mu,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0 * mu,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0 * mu,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            2.0 * mu,
+        );
         Self { D: D }
     }
 

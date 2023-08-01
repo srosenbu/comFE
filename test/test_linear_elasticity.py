@@ -1,21 +1,36 @@
 import comfe
 import numpy as np
 
-stress = np.zeros(200*6)
-strain = np.ones(200*6)
-tangents = np.zeros(200*36)
-ips = np.arange(100, dtype=np.uint64)
-model=comfe.PyLinearElastic3D({"E":42.,"nu": 0.3})
-#model.evaluate(0.5, stress[6:], strain[6:], tangents[36:])
-print(tangents[:36].reshape(6,6))
-print(tangents[36:72].reshape(6,6))
-print(stress)
+E = 42.0
+nu = 0.3
+lambda_ = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu))
+mu = E / (2.0 * (1.0 + nu))
+D = np.array([
+    [lambda_ + 2.0 * mu, lambda_, lambda_, 0., 0., 0.],
+    [lambda_, lambda_ + 2.0 * mu, lambda_, 0., 0., 0.],
+    [lambda_, lambda_, lambda_ + 2.0 * mu, 0., 0., 0.],
+    [0., 0., 0., 2.* mu, 0., 0.],
+    [0., 0., 0., 0., 2.* mu, 0.],
+    [0., 0., 0., 0., 0., 2.* mu],
+    ])
+parameters = {"E": E, "nu": nu}
+model1 = comfe.PyLinearElastic3D(parameters)
+model2 = comfe.PyLinElas3D(parameters)
 
-model.evaluate_some(0.5, stress, strain, tangents, ips)
-print(np.linalg.norm(tangents[:100*36]), np.linalg.norm(tangents[100*36:]))
-# model.evaluate(0.5, stress, stress, tangents)
 
-#model2=comfe.PyLinElas3D({"E":42.,"nu": 0.3})
 
-#model2.evaluate(0.5, stress, strain, tangents)
-#print(model2)
+def test_linear_elasticity() -> None:
+    n = 42
+    strain = np.random.random(6*n)
+    stress_rust = np.zeros(6*n)
+    tangent_rust = np.zeros(36*n)
+    stress_python = strain.reshape(-1, 6) @ D
+    tangent_python = np.tile(D.ravel(), n)
+    model1.evaluate(1.0, stress_rust, strain, tangent_rust)
+    np.testing.assert_allclose(stress_rust, stress_python.ravel())
+    np.testing.assert_allclose(tangent_rust, tangent_python)
+    model2.evaluate(1.0, {"mandel_strain": strain}, {"mandel_stress": stress_rust, "mandel_tangent": tangent_rust})
+    np.testing.assert_allclose(stress_rust, stress_python.ravel())
+    np.testing.assert_allclose(tangent_rust, tangent_python)
+
+
