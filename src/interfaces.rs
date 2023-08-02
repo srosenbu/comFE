@@ -18,7 +18,7 @@ pub enum Q {
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
     VelocityGradient,
     #[strum(serialize = "NonlocalEquivalentStrain", serialize = "nonlocal_equivalent_strain")]
-    NonlocalEquivalentStrain,
+    NonlocalStrainDelEq,
     #[strum(serialize = "Lambda", serialize = "lambda")]
     Lambda,
     #[strum(serialize =  "Density", serialize = "density")]
@@ -32,7 +32,7 @@ pub enum Q {
     #[strum(serialize = "StrainRateNorm", serialize = "strain_rate_norm")]
     StrainRateNorm,
     #[strum(serialize = "EquivalentPlasticStrain", serialize = "equivalent_plastic_strain")]
-    EquivalentPlasticStrain,
+    PlasticStrainEq,
     #[strum(serialize = "MisesStress", serialize = "mises_stress")]
     MisesStress,
     #[strum(serialize = "LAST", serialize = "last")]
@@ -175,14 +175,14 @@ impl Q {
             Q::MandelStrainRate => QDim::Vector(6),
             Q::MandelTangent => QDim::SquareTensor(6),
             Q::VelocityGradient => QDim::SquareTensor(3),
-            Q::NonlocalEquivalentStrain => QDim::Scalar,
+            Q::NonlocalStrainDelEq => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,
             Q::BulkingPressure => QDim::Scalar,
             Q::Damage => QDim::Scalar,
             Q::StrainRateNorm => QDim::Scalar,
-            Q::EquivalentPlasticStrain => QDim::Scalar,
+            Q::PlasticStrainEq => QDim::Scalar,
             Q::MisesStress => QDim::Scalar,
             Q::LAST => QDim::Scalar,
         }

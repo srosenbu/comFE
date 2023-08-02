@@ -3,37 +3,18 @@ use crate::stress_strain::{
     deviatoric, mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
 };
 
+use crate::jh2::JH2Parameters;
+
 use nalgebra::SMatrix;
 use std::cmp;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-struct JH2Parameters {
-    RHO: f64,
-    SHEAR_MODULUS: f64,
-    A: f64,
-    B: f64,
-    C: f64,
-    M: f64,
-    N: f64,
-    EPS0: f64,
-    T: f64,
-    SIGMAHEL: f64,
-    PHEL: f64,
-    D1: f64,
-    D2: f64,
-    K1: f64,
-    K2: f64,
-    K3: f64,
-    BETA: f64,
-    EFMIN: f64,
-}
-#[derive(Debug)]
-pub struct JH23D {
+pub struct GradientJH23D {
     parameters: JH2Parameters,
 }
 
-impl ConstitutiveModel for JH23D {
+impl ConstitutiveModel for GradientJH23D {
     fn new(parameters: &HashMap<String, f64>) -> Self {
         Self {
             parameters: JH2Parameters {
@@ -67,11 +48,9 @@ impl ConstitutiveModel for JH23D {
         let d_eps = mandel_rate_from_velocity_gradient(&velocity_gradient);
 
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-
+        let del_lambda_nonlocal = input.get_scalar(Q::NonlocalStrainDelEq, ip).max(0.0);
         let mut del_lambda = 0.0;
-
-        let damage_0 = input.get_scalar(Q::Damage, ip);
-        let mut damage_1 = damage_0;
+        
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * (deviatoric(&d_eps)) * del_t;
@@ -82,6 +61,14 @@ impl ConstitutiveModel for JH23D {
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
+        
+        
+        let e_p_f = (self.parameters.D1 * (p_s + t_s).powf(self.parameters.D2))
+            .max(self.parameters.EFMIN);
+
+        let damage_0 = input.get_scalar(Q::Damage, ip);
+        let damage_1 = (damage_0 + del_lambda / e_p_f).min(1.0);
+        output.set_scalar(Q::Damage, ip, damage_1);
 
         let fracture_surface =
             (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
@@ -99,14 +86,8 @@ impl ConstitutiveModel for JH23D {
             }
         };
         if s_tr_eq > yield_surface {
-            let e_p_f = (self.parameters.D1 * (p_s + t_s).powf(self.parameters.D2))
-                .max(self.parameters.EFMIN);
-
             del_lambda = (s_tr_eq - yield_surface) / (3. * self.parameters.SHEAR_MODULUS);
             alpha = yield_surface / s_tr_eq;
-
-            damage_1 = (damage_0 + del_lambda / e_p_f).min(1.0);
-            output.set_scalar(Q::Damage, ip, damage_1);
         } else {
             alpha = 1.0;
         }
@@ -161,9 +142,9 @@ impl ConstitutiveModel for JH23D {
         // Update optional output variables if needed
         // **********************************************************************
 
-        if output.is_some(Q::PlasticStrainEq) {
-            output.add_scalar(Q::PlasticStrainEq, ip, del_lambda);
-        }
+        //if output.is_some(Q::EquivalentPlasticStrain) {
+        //    output.add_scalar(Q::EquivalentPlasticStrain, ip, del_lambda);
+        //}
         if output.is_some(Q::StrainRateNorm) {
             output.set_scalar(Q::StrainRateNorm, ip, d_eps_eq);
         }
@@ -181,6 +162,8 @@ impl ConstitutiveModel for JH23D {
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
+            (Q::NonlocalStrainDelEq, QDim::Scalar),
+            (Q::PlasticStrainEq, QDim::Scalar),
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
@@ -190,6 +173,7 @@ impl ConstitutiveModel for JH23D {
 
     fn define_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
+            (Q::PlasticStrainEq, QDim::Scalar),
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
@@ -199,7 +183,6 @@ impl ConstitutiveModel for JH23D {
 
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::PlasticStrainEq, QDim::Scalar),
             (Q::StrainRateNorm, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
