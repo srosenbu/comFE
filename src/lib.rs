@@ -44,10 +44,10 @@ macro_rules! impl_constitutive_model {
                 input: HashMap<String, PyReadonlyArray1<f64>>,
                 output: HashMap<String, PyReadwriteArray1<f64>>,
             ) -> PyResult<()> {
-                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                let mut input_data: [Option<DVectorView<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
-                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
                 //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
 
@@ -85,10 +85,10 @@ macro_rules! impl_constitutive_model {
                 output: HashMap<String, PyReadwriteArray1<f64>>,
                 ips: PyReadonlyArray1<usize>,
             ) -> PyResult<()> {
-                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                let mut input_data: [Option<DVectorView<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
-                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
                 for (key, value) in input.iter() {
