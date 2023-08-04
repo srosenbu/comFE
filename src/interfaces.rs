@@ -41,10 +41,16 @@ pub enum Q {
     MisesStress,
     #[strum(serialize = "InternalEnergy", serialize = "internal_energy")]
     InternalEnergy,
+    #[strum(serialize = "InternalElasticEnergy", serialize = "internal_elastic_energy")]
+    InternalElasticEnergy,
+    #[strum(serialize = "InternalPlasticEnergy", serialize = "internal_plastic_energy")]
+    InternalPlasticEnergy,
     #[strum(serialize = "InternalEnergyRate", serialize = "internal_energy_rate")]
     InternalEnergyRate,
     #[strum(serialize = "InternalElasticEnergyRate", serialize = "internal_elastic_energy_rate")]
     InternalElasticEnergyRate,
+    #[strum(serialize = "InternalPlasticEnergyRate", serialize = "internal_plastic_energy_rate")]
+    InternalPlasticEnergyRate,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -203,8 +209,11 @@ impl Q {
             Q::EqPlasticStrain => QDim::Scalar,
             Q::MisesStress => QDim::Scalar,
             Q::InternalEnergy => QDim::Scalar,
+            Q::InternalElasticEnergy => QDim::Scalar,
+            Q::InternalPlasticEnergy => QDim::Scalar,
             Q::InternalEnergyRate => QDim::Scalar,
             Q::InternalElasticEnergyRate => QDim::Scalar,
+            Q::InternalPlasticEnergyRate => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
         }
     }

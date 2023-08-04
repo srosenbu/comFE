@@ -46,14 +46,16 @@ impl ConstitutiveModel for GradientJH23D {
                 ip,
             );
         let d_eps = mandel_rate_from_velocity_gradient(&velocity_gradient);
-
+        let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
+        d_eps_vol *= -1.0;
+        
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-        let del_lambda_nonlocal = input.get_scalar(Q::NonlocalStrainDelEq, ip).max(0.0);
+        let lambda_nonlocal = input.get_scalar(Q::EqNonlocalStrain, ip).max(0.0);
         let mut del_lambda = 0.0;
         
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
-        let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * (deviatoric(&d_eps)) * del_t;
+        let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
         let d_eps_eq = ((2. / 3.) * d_eps.norm_squared()).sqrt();
         let mut alpha;
@@ -106,15 +108,24 @@ impl ConstitutiveModel for GradientJH23D {
         let mu = density_1 / self.parameters.RHO - 1.;
         
         //let mut del_p_0 = 0.0;
-        
-        let p = {
+        let mut d_eps_vol_pl = 0.0;
+        let p_1 = {
             if mu > 0.0 {
                 self.parameters.K1 * mu
                     + self.parameters.K2 * mu.powi(2)
                     + self.parameters.K3 * mu.powi(3)
                     + input.get_scalar(Q::BulkingPressure, ip)
             } else {
-                (self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
+                let p_trial = self.parameters.K1*mu;
+                let p_damaged = -self.parameters.T * (1. - damage_1);
+                if p_trial > p_damaged {
+                    p_trial
+                } else {
+                    d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
+                    p_damaged
+                }
+                //d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
+                //(self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
             }
         };
         if damage_1 > damage_0 {
@@ -136,7 +147,9 @@ impl ConstitutiveModel for GradientJH23D {
         // /***********************************************************************
         //  * Combine deviatoric and volumetric stresses
         //  **********************************************************************/
-        output.set_vector(Q::MandelStress, ip, alpha * s_tr - MANDEL_IDENTITY * p);
+        let s_1 = s_tr * alpha;
+        let sigma_1 = s_1 - MANDEL_IDENTITY * p_1;
+        output.set_vector(Q::MandelStress, ip, sigma_1);
 
         // ***********************************************************************
         // Update optional output variables if needed
@@ -145,8 +158,8 @@ impl ConstitutiveModel for GradientJH23D {
         //if output.is_some(Q::EquivalentPlasticStrain) {
         //    output.add_scalar(Q::EquivalentPlasticStrain, ip, del_lambda);
         //}
-        if output.is_some(Q::StrainRateNorm) {
-            output.set_scalar(Q::StrainRateNorm, ip, d_eps_eq);
+        if output.is_some(Q::EqStrainRate) {
+            output.set_scalar(Q::EqStrainRate, ip, d_eps_eq);
         }
         if output.is_some(Q::MandelStrainRate) {
             output.set_vector(Q::MandelStrainRate, ip, d_eps);
@@ -155,15 +168,47 @@ impl ConstitutiveModel for GradientJH23D {
             output.set_scalar(Q::MisesStress, ip, alpha * s_tr_eq);
         }
         if output.is_some(Q::Pressure) {
-            output.set_scalar(Q::Pressure, ip, p);
+            output.set_scalar(Q::Pressure, ip, p_1);
+        }
+        if output.is_some(Q::InternalEnergyRate) {
+            output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
+        }
+        
+        // Update optional internal variables if needed
+        
+        if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
+            let s_mid = 0.5 * (s_0 + s_1);
+            let p_mid = 0.5 * (p_0 + p_1); 
+            let deviatoric_rate = deviatoric(&d_eps) * (1.-alpha);
+            let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
+            let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
+            output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
+        }
+        if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
+            let e_0 = input.get_scalar(Q::InternalEnergy, ip);
+            let sigma_mid = 0.5 * (sigma_0 + sigma_1);
+            let e_1 = e_0 + del_t * sigma_mid.dot(&d_eps);
+            output.set_scalar(Q::InternalEnergy, ip, e_1);
+        }
+
+        if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {
+            output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
         }
     }
 
+    /// Returns the physical quantities that are required as input for the
+    /// constitutive model together with their dimensions.
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
-            (Q::NonlocalStrainDelEq, QDim::Scalar),
-            (Q::PlasticStrainEq, QDim::Scalar),
+            (Q::EqNonlocalStrain, QDim::Scalar),
+        ])
+    }
+
+    /// Returns the physical quantities that are needed as internal variables
+    /// for the constitutive model together with their dimensions.
+    fn define_history(&self) -> HashMap<Q, QDim> {
+        HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
@@ -171,22 +216,33 @@ impl ConstitutiveModel for GradientJH23D {
         ])
     }
 
+    /// Returns the physical quantities that are needed as output, but are not
+    /// necessarily needed in oredr to calculate the constitutive model. An example is
+    /// the consistent tangent which is not needed for the calculation of the stresses 
+    /// and is therefore purely an output quantity.
     fn define_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::PlasticStrainEq, QDim::Scalar),
             (Q::MandelStress, QDim::Vector(6)),
-            (Q::Damage, QDim::Scalar),
-            (Q::BulkingPressure, QDim::Scalar),
-            (Q::Density, QDim::Scalar),
         ])
     }
 
+    /// Returns the physical quantities that are optional output of the constitutive
+    /// model. These quantities are not needed for the calculation of the stresses
+    /// but can be useful for postprocessing.
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::StrainRateNorm, QDim::Scalar),
+            (Q::EqStrainRate, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
+            (Q::InternalEnergyRate, QDim::Scalar),
+            (Q::InternalElasticEnergyRate, QDim::Scalar),
+            (Q::InternalPlasticEnergyRate, QDim::Scalar),
+        ])
+    }
+    fn define_optional_history(&self) -> HashMap<Q, QDim> {
+        HashMap::from([
+            (Q::EqPlasticStrain, QDim::Scalar),
         ])
     }
 }
