@@ -68,6 +68,12 @@ impl<'a> QValueInput<'a> {
     pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::_LAST as usize]) -> Self{
         Self { data }
     }
+    pub fn is_some(&self, q: Q) -> bool {
+        self.data[q as usize].is_some()
+    }
+    pub fn is_none(&self, q: Q) -> bool {
+        self.data[q as usize].is_none()
+    }
     pub fn get_data(&self, q: Q) -> &DVectorView<f64> {
         self.data[q as usize].as_ref().unwrap()
     }
@@ -222,18 +228,11 @@ pub trait ConstitutiveModel {
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::new()
     }
-    fn define_internal_variables(&self) -> HashMap<Q, QDim> {
+    fn define_history(&self) -> HashMap<Q, QDim> {
         HashMap::new()
     }
-    fn define_total_input(&self) -> HashMap<Q, QDim> {
-        let mut input = self.define_input();
-        input.extend(self.define_internal_variables());
-        input
-    }
-    fn define_total_output(&self) -> HashMap<Q, QDim> {
-        let mut output = self.define_output();
-        output.extend(self.define_internal_variables());
-        output
+    fn define_optional_history(&self) -> HashMap<Q, QDim> {
+        HashMap::new()
     }
     //fn initialize(&mut self, input: &QValueInput, output: &mut QValueOutput);
 
@@ -261,8 +260,10 @@ pub trait ConstitutiveModel {
         input: &QValueInput,
         output: &mut QValueOutput,
     ) -> Result<usize, &str> {
-        let input_def = self.define_total_input();
-        let output_def = self.define_total_output();
+        let mut input_def = self.define_input();
+        let mut output_def = self.define_output();
+        input_def.extend(self.define_history());
+        output_def.extend(self.define_history());
 
         let mut sizes = Vec::<usize>::new();
         for (q, dim) in input_def {

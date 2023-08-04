@@ -184,6 +184,48 @@ macro_rules! impl_constitutive_model {
                 }
                 Ok(output_py.into())
             }
+            fn define_history(&self, py: Python) -> PyResult<PyObject> {
+                let history_py = PyDict::new(py);
+                let history_rs = self.model.define_history();
+                for (key, value) in history_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            history_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            history_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            history_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("General Tensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(history_py.into())
+            }
+            fn define_optional_history(&self, py: Python) -> PyResult<PyObject> {
+                let history_py = PyDict::new(py);
+                let history_rs = self.model.define_optional_history();
+                for (key, value) in history_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            history_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            history_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            history_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("General Tensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(history_py.into())
+            }
         }
         $m.add_class::<$name>()?;
     };
