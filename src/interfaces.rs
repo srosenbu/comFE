@@ -11,14 +11,18 @@ pub enum Q {
     MandelStress,
     #[strum(serialize = "MandelStrain", serialize = "mandel_strain")]
     MandelStrain,
+    #[strum(serialize = "MandelPlasticStrain", serialize = "mandel_plastic_strain")]
+    MandelPlasticStrain,
     #[strum(serialize = "MandelStrainRate", serialize = "mandel_strain_rate")]
     MandelStrainRate,
+    #[strum(serialize = "MandelPlasticStrainRate", serialize = "mandel_plastic_strain_rate")]
+    MandelPlasticStrainRate,
     #[strum(serialize = "MandelTangent", serialize = "mandel_tangent")]
     MandelTangent,
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
     VelocityGradient,
-    #[strum(serialize = "NonlocalEquivalentStrain", serialize = "nonlocal_equivalent_strain")]
-    NonlocalStrainDelEq,
+    #[strum(serialize = "EqNonlocalStrain", serialize = "equivalent_nonlocal_strain")]
+    EqNonlocalStrain,
     #[strum(serialize = "Lambda", serialize = "lambda")]
     Lambda,
     #[strum(serialize =  "Density", serialize = "density")]
@@ -29,24 +33,30 @@ pub enum Q {
     BulkingPressure,
     #[strum(serialize = "Damage", serialize = "damage")]
     Damage,
-    #[strum(serialize = "StrainRateNorm", serialize = "strain_rate_norm")]
-    StrainRateNorm,
-    #[strum(serialize = "EquivalentPlasticStrain", serialize = "equivalent_plastic_strain")]
-    PlasticStrainEq,
+    #[strum(serialize = "EqStrainRate", serialize = "equivalent_strain_rate")]
+    EqStrainRate,
+    #[strum(serialize = "EqPlasticStrain", serialize = "equivalent_plastic_strain")]
+    EqPlasticStrain,
     #[strum(serialize = "MisesStress", serialize = "mises_stress")]
     MisesStress,
-    #[strum(serialize = "LAST", serialize = "last")]
-    LAST,
+    #[strum(serialize = "InternalEnergy", serialize = "internal_energy")]
+    InternalEnergy,
+    #[strum(serialize = "InternalEnergyRate", serialize = "internal_energy_rate")]
+    InternalEnergyRate,
+    #[strum(serialize = "InternalElasticEnergyRate", serialize = "internal_elastic_energy_rate")]
+    InternalElasticEnergyRate,
+    #[strum(serialize = "_LAST", serialize = "_last")]
+    _LAST,
 }
 
 #[derive(Debug)]
 pub struct QValueInput<'a> {
-    data: [Option<DVectorView<'a, f64>>; Q::LAST as usize],
+    data: [Option<DVectorView<'a, f64>>; Q::_LAST as usize],
 }
 
 #[derive(Debug)]
 pub struct QValueOutput<'a> {
-    data: [Option<DVectorViewMut<'a, f64>>; Q::LAST as usize],
+    data: [Option<DVectorViewMut<'a, f64>>; Q::_LAST as usize],
 }
 impl<'a> QValueInput<'a> {
     //TODO: When the const generics are stabilized, most of this should be changed to sth like
@@ -55,8 +65,14 @@ impl<'a> QValueInput<'a> {
     // pub fn get<Q>(&self) -> Q::AssociatedType){ ... }; 
     // ```
 
-    pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::LAST as usize]) -> Self{
+    pub fn new<'b: 'a>(data: [Option<DVectorView<'b, f64>>; Q::_LAST as usize]) -> Self{
         Self { data }
+    }
+    pub fn is_some(&self, q: Q) -> bool {
+        self.data[q as usize].is_some()
+    }
+    pub fn is_none(&self, q: Q) -> bool {
+        self.data[q as usize].is_none()
     }
     pub fn get_data(&self, q: Q) -> &DVectorView<f64> {
         self.data[q as usize].as_ref().unwrap()
@@ -102,7 +118,7 @@ impl<'a> QValueOutput<'a> {
     // pub fn set<Q>(&self, value: Q::AssociatedType){ ... }; 
     // ```
 
-    pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::LAST as usize]) -> Self{
+    pub fn new<'b: 'a>(data: [Option<DVectorViewMut<'b, f64>>; Q::_LAST as usize]) -> Self{
         Self { data }
     }
     pub fn is_some(&self, q: Q) -> bool {
@@ -172,19 +188,24 @@ impl Q {
         match self {
             Q::MandelStress => QDim::Vector(6),
             Q::MandelStrain => QDim::Vector(6),
+            Q::MandelPlasticStrain => QDim::Vector(6),
+            Q::MandelPlasticStrainRate => QDim::Vector(6),
             Q::MandelStrainRate => QDim::Vector(6),
             Q::MandelTangent => QDim::SquareTensor(6),
             Q::VelocityGradient => QDim::SquareTensor(3),
-            Q::NonlocalStrainDelEq => QDim::Scalar,
+            Q::EqNonlocalStrain => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,
             Q::BulkingPressure => QDim::Scalar,
             Q::Damage => QDim::Scalar,
-            Q::StrainRateNorm => QDim::Scalar,
-            Q::PlasticStrainEq => QDim::Scalar,
+            Q::EqStrainRate => QDim::Scalar,
+            Q::EqPlasticStrain => QDim::Scalar,
             Q::MisesStress => QDim::Scalar,
-            Q::LAST => QDim::Scalar,
+            Q::InternalEnergy => QDim::Scalar,
+            Q::InternalEnergyRate => QDim::Scalar,
+            Q::InternalElasticEnergyRate => QDim::Scalar,
+            Q::_LAST => QDim::Scalar,
         }
     }
     pub const fn dim(&self) -> usize {
@@ -205,6 +226,12 @@ pub trait ConstitutiveModel {
     fn define_output(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what extra output can be provided
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
+        HashMap::new()
+    }
+    fn define_history(&self) -> HashMap<Q, QDim> {
+        HashMap::new()
+    }
+    fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::new()
     }
     //fn initialize(&mut self, input: &QValueInput, output: &mut QValueOutput);
@@ -233,8 +260,11 @@ pub trait ConstitutiveModel {
         input: &QValueInput,
         output: &mut QValueOutput,
     ) -> Result<usize, &str> {
-        let input_def = self.define_input();
-        let output_def = self.define_output();
+        let mut input_def = self.define_input();
+        let mut output_def = self.define_output();
+        input_def.extend(self.define_history());
+        output_def.extend(self.define_history());
+
         let mut sizes = Vec::<usize>::new();
         for (q, dim) in input_def {
             sizes.push(input.get_data(q).len() / dim.size());

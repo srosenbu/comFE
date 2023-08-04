@@ -38,10 +38,10 @@ class ConstitutiveModel(BaseModel):
         rule: QuadratureRule,
         mesh: df.mesh.Mesh,
         ips: np.ndarray[np.uint64] | None = None,
-        additional_output: list[str] | None = None,
+        additional_variables: list[str] | None = None,
     ) -> None:
         input, output, spaces = ceate_input_and_output(
-            model, rule, mesh, None, additional_output
+            model, rule, mesh, None, additional_variables
         )
         super().__init__(
             rs_object=model, input=input, output=output, ips=ips, spaces=spaces
@@ -58,6 +58,9 @@ class ConstitutiveModel(BaseModel):
         self.rs_object.evaluate_some(del_t, self.ips, input, output)
 
     def update(self) -> None:
+        """
+        Writes the updated variables in output to the input, making them the new initial state.
+        """
         keys = set(self.input.keys()).intersection(set(self.output.keys()))
         for key in keys:
             self.input[key].vector.array[:] = self.output[key].vector.array
@@ -71,7 +74,7 @@ def ceate_input_and_output(
     rule: QuadratureRule,
     mesh: df.mesh.Mesh,
     spaces: dict[int | tuple[int, int], df.fem.FunctionSpace] | None = None,
-    optional_output: list[str] | None = None,
+    optional_variables: list[str] | None = None,
 ) -> tuple[
     dict[str, np.ndarray],
     dict[str, np.ndarray],
@@ -79,22 +82,34 @@ def ceate_input_and_output(
 ]:
     inputs = model.define_input()
     outputs = model.define_output()
-    if optional_output is None:
+    inputs.update(model.define_history())
+    outputs.update(model.define_history())
+
+    if optional_variables is None:
         optional_output = {}
+        optional_history = {}
     else:
         optional_output = dict(
             filter(
-                lambda item: item[0] in optional_output,
+                lambda item: item[0] in optional_variables,
                 model.define_optional_output().items(),
             )
         )
+        optional_history = dict(
+            filter(
+                lambda item: item[0] in optional_variables,
+                model.define_optional_history().items(),
+            )
+        )
+
+    outputs.update(optional_output)
+    outputs.update(optional_history)
+    inputs.update(optional_history)
+
     spaces = {} if spaces is None else spaces
     input_dict, spaces = _spaces_from_dict(inputs, rule, mesh, spaces)
     output_dict, spaces = _spaces_from_dict(outputs, rule, mesh, spaces)
-    optional_output_dict, spaces = _spaces_from_dict(
-        optional_output, rule, mesh, spaces
-    )
-    output_dict.update(optional_output_dict)
+
     return input_dict, output_dict, spaces
 
 

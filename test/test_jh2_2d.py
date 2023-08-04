@@ -77,18 +77,19 @@ case1_points = np.array(
         1.7650841715890195,
         1.4802654398975106,
         1.9583509508389314,
-        1.5420022432253835,
-        1.7140368689029724,
-        1.596629591839318,
-        1.576597538528536,
-        1.6590955700096468,
-        1.4238860461760101,
-        1.689315816258067,
-        1.2203044811338672,
-        1.8207090718971455,
-        0.7265822207931296,
-        1.8514559444206729,
-        0.5891580815612452,
+        # The following entries are not in the original data
+        # 1.5420022432253835,
+        # 1.7140368689029724,
+        # 1.596629591839318,
+        # 1.576597538528536,
+        # 1.6590955700096468,
+        # 1.4238860461760101,
+        # 1.689315816258067,
+        # 1.2203044811338672,
+        # 1.8207090718971455,
+        # 0.7265822207931296,
+        # 1.8514559444206729,
+        # 0.5891580815612452,
         2.006000501307704,
         0.003818040494522723,
         4.529451827621042,
@@ -467,7 +468,7 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     u_ = ufl.TrialFunction(P1)
 
 
-    h = 1e-2 
+    h = 1e-1 
 
     mass_form = ufl.inner(u_, v_) * parameters["RHO"] * ufl.dx
 
@@ -484,7 +485,8 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     M_action.array[:] = 1.0 / M_action.array
     M_action.ghostUpdate()
 
-    solver = co.cdm.CDMPlaneStrainX(P1, 0, None, bcs, M_function, law, rule, additional_output=["mises_stress", "pressure"])
+    solver = co.cdm.CDMPlaneStrainX(P1, 0, None, bcs, M_function, law, rule, additional_output=["mises_stress", "pressure", "equivalent_plastic_strain"])
+    #print(solver.model.input.keys(), solver.model.output.keys())
     solver.model.input["density"].vector.array[:] += parameters["RHO"]
     solver.model.output["density"].vector.array[:] += parameters["RHO"]
     s_eq_ = []
@@ -544,10 +546,8 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     # s_eq_*=1./scale_s
     points = np.hstack((p_ ,s_eq_))
     tree = KDTree(points)
-    distances = tree.query(true_points)
-    print(distances[0])
-    print(np.max(distances[0]))
-    #assert np.max(distances[0]) < 0.1
+    distances = tree.query(test_case["points"])
+    assert np.mean(distances[0]/np.max(np.abs(test_case["points"][:,1]))) < 0.05
     #for p, mises in test_case["points"]:
     #    index = tree.query(p)
     #    assert np.isclose(p, y_i(x, parameters))

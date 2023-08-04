@@ -44,10 +44,10 @@ macro_rules! impl_constitutive_model {
                 input: HashMap<String, PyReadonlyArray1<f64>>,
                 output: HashMap<String, PyReadwriteArray1<f64>>,
             ) -> PyResult<()> {
-                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                let mut input_data: [Option<DVectorView<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
-                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
                 //let mut q_output = HashMap::<Q, DVectorViewMut<f64>>::new();
 
@@ -85,10 +85,10 @@ macro_rules! impl_constitutive_model {
                 output: HashMap<String, PyReadwriteArray1<f64>>,
                 ips: PyReadonlyArray1<usize>,
             ) -> PyResult<()> {
-                let mut input_data: [Option<DVectorView<f64>>; Q::LAST as usize] =
+                let mut input_data: [Option<DVectorView<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
-                let mut output_data: [Option<DVectorViewMut<f64>>; Q::LAST as usize] =
+                let mut output_data: [Option<DVectorViewMut<f64>>; Q::_LAST as usize] =
                     std::array::from_fn(|_| None);
 
                 for (key, value) in input.iter() {
@@ -183,6 +183,48 @@ macro_rules! impl_constitutive_model {
                     }
                 }
                 Ok(output_py.into())
+            }
+            fn define_history(&self, py: Python) -> PyResult<PyObject> {
+                let history_py = PyDict::new(py);
+                let history_rs = self.model.define_history();
+                for (key, value) in history_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            history_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            history_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            history_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("General Tensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(history_py.into())
+            }
+            fn define_optional_history(&self, py: Python) -> PyResult<PyObject> {
+                let history_py = PyDict::new(py);
+                let history_rs = self.model.define_optional_history();
+                for (key, value) in history_rs.iter() {
+                    match value {
+                        QDim::Scalar => {
+                            history_py.set_item(key.to_string(), 1)?;
+                        }
+                        QDim::Vector(n) => {
+                            history_py.set_item(key.to_string(), n)?;
+                        }
+                        QDim::SquareTensor(n) => {
+                            history_py.set_item(key.to_string(), (n, n))?;
+                        }
+                        QDim::Tensor(_n, _m) => {
+                            panic!("General Tensor not implemented yet");
+                        }
+                    }
+                }
+                Ok(history_py.into())
             }
         }
         $m.add_class::<$name>()?;
