@@ -74,4 +74,5 @@ impl ConstitutiveModel for LinearElastic3D {
             (Q::MandelTangent, Q::MandelTangent.q_dim()),
         ])
     }
+    
 }

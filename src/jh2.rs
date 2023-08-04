@@ -155,17 +155,15 @@ impl ConstitutiveModel for JH23D {
         // /***********************************************************************
         //  * Combine deviatoric and volumetric stresses
         //  **********************************************************************/
-        output.set_vector(Q::MandelStress, ip, alpha * s_tr - MANDEL_IDENTITY * p);
+        let sigma_1 = alpha * s_tr - MANDEL_IDENTITY * p;
+        output.set_vector(Q::MandelStress, ip, sigma_1);
 
         // ***********************************************************************
         // Update optional output variables if needed
         // **********************************************************************
 
-        if output.is_some(Q::EquivalentPlasticStrain) {
-            output.add_scalar(Q::EquivalentPlasticStrain, ip, del_lambda);
-        }
-        if output.is_some(Q::StrainRateNorm) {
-            output.set_scalar(Q::StrainRateNorm, ip, d_eps_eq);
+        if output.is_some(Q::EqStrainRate) {
+            output.set_scalar(Q::EqStrainRate, ip, d_eps_eq);
         }
         if output.is_some(Q::MandelStrainRate) {
             output.set_vector(Q::MandelStrainRate, ip, d_eps);
@@ -176,11 +174,34 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p);
         }
+        if output.is_some(Q::InternalEnergyRate) {
+            output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
+        }
+        
+        // Update optional internal variables if needed
+        
+        if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {
+            output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
+        }
+        //if output.is_some(Q::InternalElasticEnergyRate) {
+        //    output.set_scalar(Q::InternalElasticEnergyRate, ip, sigma_1.dot());
+        //}
+            
+        
     }
 
+    /// Returns the physical quantities that are required as input for the
+    /// constitutive model together with their dimensions.
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
+        ])
+    }
+
+    /// Returns the physical quantities that are needed as internal variables
+    /// for the constitutive model together with their dimensions.
+    fn define_history(&self) -> HashMap<Q, QDim> {
+        HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
@@ -188,22 +209,33 @@ impl ConstitutiveModel for JH23D {
         ])
     }
 
+    /// Returns the physical quantities that are needed as output, but are not
+    /// necessarily needed in oredr to calculate the constitutive model. An example is
+    /// the consistent tangent which is not needed for the calculation of the stresses 
+    /// and is therefore purely an output quantity.
     fn define_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
-            (Q::Damage, QDim::Scalar),
-            (Q::BulkingPressure, QDim::Scalar),
-            (Q::Density, QDim::Scalar),
         ])
     }
 
+    /// Returns the physical quantities that are optional output of the constitutive
+    /// model. These quantities are not needed for the calculation of the stresses
+    /// but can be useful for postprocessing.
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::EquivalentPlasticStrain, QDim::Scalar),
-            (Q::StrainRateNorm, QDim::Scalar),
+            (Q::EqStrainRate, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
+            (Q::InternalEnergyRate, QDim::Scalar),
+            (Q::InternalElasticEnergyRate, QDim::Scalar),
         ])
     }
+    fn define_optional_history(&self) -> HashMap<Q, QDim> {
+        HashMap::from([
+            (Q::EqPlasticStrain, QDim::Scalar),
+        ])
+    }
+
 }
