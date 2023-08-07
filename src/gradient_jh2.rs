@@ -50,7 +50,7 @@ impl ConstitutiveModel for GradientJH23D {
         d_eps_vol *= -1.0;
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-        let lambda_nonlocal = input.get_scalar(Q::EqNonlocalStrain, ip).max(0.0);
+        let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalStrainRate, ip).max(0.0);
         let mut del_lambda = 0.0;
         
 
@@ -69,7 +69,7 @@ impl ConstitutiveModel for GradientJH23D {
             .max(self.parameters.EFMIN);
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
-        let damage_1 = (damage_0 + del_lambda / e_p_f).min(1.0);
+        let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(1.0);
         output.set_scalar(Q::Damage, ip, damage_1);
 
         let fracture_surface =
@@ -84,7 +84,7 @@ impl ConstitutiveModel for GradientJH23D {
             if damage_0 == 0.0 {
                 fracture_surface
             } else {
-                fracture_surface * (1. - damage_0) + damage_0 * residual_surface
+                fracture_surface * (1. - damage_1) + damage_1 * residual_surface
             }
         };
         if s_tr_eq > yield_surface {
@@ -100,7 +100,7 @@ impl ConstitutiveModel for GradientJH23D {
         //  * deformation gradient.
         //  TODO: Move this since, it will be calculated outside of the constitutive model
         //  **********************************************************************/
-        let f1 = del_t / 2. * velocity_gradient.trace();
+        let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
         let density_1 = density_0 * (1. - f1) / (1. + f1);
         output.set_scalar(Q::Density, ip, density_1);
@@ -170,19 +170,27 @@ impl ConstitutiveModel for GradientJH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-        if output.is_some(Q::InternalEnergyRate) {
-            output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
-        }
+        //if output.is_some(Q::InternalEnergyRate) {
+        //    output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
+        //}
         
         // Update optional internal variables if needed
         
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
             let p_mid = 0.5 * (p_0 + p_1); 
-            let deviatoric_rate = deviatoric(&d_eps) * (1.-alpha);
+            let deviatoric_rate = d_eps_dev * (1.-alpha);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
             let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
+        }
+        if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
+            let s_mid = 0.5 * (s_0 + s_1);
+            let p_mid = 0.5 * (p_0 + p_1); 
+            let deviatoric_rate = d_eps_dev * alpha;
+            let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
+            let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
+            output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
@@ -201,7 +209,7 @@ impl ConstitutiveModel for GradientJH23D {
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
-            (Q::EqNonlocalStrain, QDim::Scalar),
+            (Q::EqNonlocalStrainRate, QDim::Scalar),
         ])
     }
 
@@ -235,14 +243,17 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
-            (Q::InternalEnergyRate, QDim::Scalar),
-            (Q::InternalElasticEnergyRate, QDim::Scalar),
-            (Q::InternalPlasticEnergyRate, QDim::Scalar),
+            //(Q::InternalEnergyRate, QDim::Scalar),
+            //(Q::InternalElasticEnergyRate, QDim::Scalar),
+            //(Q::InternalPlasticEnergyRate, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::EqPlasticStrain, QDim::Scalar),
+            (Q::InternalPlasticEnergy, QDim::Scalar),
+            (Q::InternalElasticEnergy, QDim::Scalar),
+            (Q::InternalEnergy, QDim::Scalar),
         ])
     }
 }

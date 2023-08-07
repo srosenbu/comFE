@@ -185,9 +185,9 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-        if output.is_some(Q::InternalEnergyRate) {
-            output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
-        }
+        //if output.is_some(Q::InternalEnergyRate) {
+        //    output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
+        //}
         
         
         // Update optional internal variables if needed
@@ -195,10 +195,18 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
             let p_mid = 0.5 * (p_0 + p_1); 
-            let deviatoric_rate = deviatoric(&d_eps) * (1.-alpha);
+            let deviatoric_rate = d_eps_dev * (1.-alpha);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
             let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
+        }
+        if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
+            let s_mid = 0.5 * (s_0 + s_1);
+            let p_mid = 0.5 * (p_0 + p_1); 
+            let deviatoric_rate = d_eps_dev * alpha;
+            let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
+            let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
+            output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
@@ -224,7 +232,8 @@ impl ConstitutiveModel for JH23D {
     }
 
     /// Returns the physical quantities that are needed as internal variables
-    /// for the constitutive model together with their dimensions.
+    /// for the constitutive model together with their dimensions. These Variables are 
+    /// stored both in in the input and the output.
     fn define_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
@@ -253,15 +262,16 @@ impl ConstitutiveModel for JH23D {
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
-            (Q::InternalEnergyRate, QDim::Scalar),
-            (Q::InternalElasticEnergyRate, QDim::Scalar),
-            (Q::InternalPlasticEnergyRate, QDim::Scalar),
+            //(Q::InternalEnergyRate, QDim::Scalar),
+            //(Q::InternalElasticEnergyRate, QDim::Scalar),
+            //(Q::InternalPlasticEnergyRate, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::EqPlasticStrain, QDim::Scalar),
             (Q::InternalPlasticEnergy, QDim::Scalar),
+            (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),
         ])
     }

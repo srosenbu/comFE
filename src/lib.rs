@@ -363,7 +363,7 @@ fn py_jaumann_rotation(
     velocity_gradient: PyReadonlyArray1<f64>,
     stress: PyReadwriteArray1<f64>,
 ) -> PyResult<()> {
-    let mut velocity_gradient = velocity_gradient
+    let velocity_gradient = velocity_gradient
         .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
         .unwrap();
     let mut stress = stress
@@ -378,7 +378,7 @@ fn py_jaumann_rotation_expensive(
     velocity_gradient: PyReadonlyArray1<f64>,
     stress: PyReadwriteArray1<f64>,
 ) -> PyResult<()> {
-    let mut velocity_gradient = velocity_gradient
+    let velocity_gradient = velocity_gradient
         .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
         .unwrap();
     let mut stress = stress

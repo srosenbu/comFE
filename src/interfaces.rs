@@ -23,6 +23,8 @@ pub enum Q {
     VelocityGradient,
     #[strum(serialize = "EqNonlocalStrain", serialize = "equivalent_nonlocal_strain")]
     EqNonlocalStrain,
+    #[strum(serialize = "EqNonlocalStrainRate", serialize = "equivalent_nonlocal_strain_rate")]
+    EqNonlocalStrainRate,
     #[strum(serialize = "Lambda", serialize = "lambda")]
     Lambda,
     #[strum(serialize =  "Density", serialize = "density")]
@@ -177,12 +179,14 @@ impl QDim {
             QDim::Tensor(n, m) => *n * *m,
         }
     }
+    //TODO: Later this should return a tuple of (n,m) for all
+    // cases. 
     pub const fn dim(&self) -> usize {
         match self {
             QDim::Scalar => 1,
             QDim::Vector(n) => *n,
             QDim::SquareTensor(n) => *n,
-            QDim::Tensor(n, m) => panic!("Tensor dimensions are not implemented yet."),
+            QDim::Tensor(_n, _m) => panic!("Tensor dimensions are not implemented yet."),
         }
     }
 }
@@ -200,6 +204,7 @@ impl Q {
             Q::MandelTangent => QDim::SquareTensor(6),
             Q::VelocityGradient => QDim::SquareTensor(3),
             Q::EqNonlocalStrain => QDim::Scalar,
+            Q::EqNonlocalStrainRate => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,

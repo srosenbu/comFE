@@ -78,32 +78,32 @@ pub fn mandel_rate_from_velocity_gradient(
 
 pub const MANDEL_IDENTITY: SVector<f64, 6> = SVector::<f64, 6>::new(1.0, 1.0, 1.0, 0.0, 0.0, 0.0);
 
-fn jaumann_rotation_del_sigma(
-    velocity_gradient: &SMatrix<f64, 3, 3>,
-    stress: &SVector<f64, 6>,
-) -> SVector<f64, 6> {
-    const FACTOR: f64 = 0.7071067811865475; // 1/sqrt(2)
-    let differences: [f64; 3] = [
-        velocity_gradient.m12 - velocity_gradient.m21,
-        velocity_gradient.m13 - velocity_gradient.m31,
-        velocity_gradient.m23 - velocity_gradient.m32,
-    ];
-    let mut result = SVector::<f64, 6>::zeros();
-    result.x = FACTOR * (stress.a * differences[1] + stress.b * differences[0]);
-    result.y = FACTOR * (stress.w * differences[2] - stress.b * differences[0]);
-    result.z = FACTOR * (-stress.w * differences[2] - stress.a * differences[1]);
-    result.w = FACTOR
-        * (-stress.y * differences[2] + stress.z * differences[2]
-            - FACTOR * (stress.a * differences[0] + stress.b * differences[1]));
-    result.a = FACTOR
-        * (-stress.x * differences[1] - stress.z * differences[1]
-            + FACTOR * (stress.w * differences[0] - stress.b * differences[2]));
-    result.b = FACTOR
-        * (-stress.x * differences[0]
-            + stress.y * differences[0]
-            + FACTOR * (stress.w * differences[1] + stress.a * differences[2]));
-    result
-}
+// fn jaumann_rotation_del_sigma(
+//     velocity_gradient: &SMatrix<f64, 3, 3>,
+//     stress: &SVector<f64, 6>,
+// ) -> SVector<f64, 6> {
+//     const FACTOR: f64 = 0.7071067811865475; // 1/sqrt(2)
+//     let differences: [f64; 3] = [
+//         velocity_gradient.m12 - velocity_gradient.m21,
+//         velocity_gradient.m13 - velocity_gradient.m31,
+//         velocity_gradient.m23 - velocity_gradient.m32,
+//     ];
+//     let mut result = SVector::<f64, 6>::zeros();
+//     result.x = FACTOR * (stress.a * differences[1] + stress.b * differences[0]);
+//     result.y = FACTOR * (stress.w * differences[2] - stress.b * differences[0]);
+//     result.z = FACTOR * (-stress.w * differences[2] - stress.a * differences[1]);
+//     result.w = FACTOR
+//         * (-stress.y * differences[2] + stress.z * differences[2]
+//             - FACTOR * (stress.a * differences[0] + stress.b * differences[1]));
+//     result.a = FACTOR
+//         * (-stress.x * differences[1] - stress.z * differences[1]
+//             + FACTOR * (stress.w * differences[0] - stress.b * differences[2]));
+//     result.b = FACTOR
+//         * (-stress.x * differences[0]
+//             + stress.y * differences[0]
+//             + FACTOR * (stress.w * differences[1] + stress.a * differences[2]));
+//     result
+// }
 
 pub fn jaumann_rotation(
     del_t: f64,

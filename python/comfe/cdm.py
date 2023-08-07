@@ -257,6 +257,7 @@ class CDMPlaneStrainX(CDMX3D):
 #         zeta: float,
 #         gamma: float,
 #         quadrature_rule: QuadratureRule,
+#         q_fields: dict[str, df.fem.Function] | None = None,
 #     ):
 #         # self.M = M
 #         # self.l = l
@@ -264,6 +265,7 @@ class CDMPlaneStrainX(CDMX3D):
 #         # self.gamma = gamma
 #         # self.quadrature_rule = quadrature_rule
 
+    
 #         QS = quadrature_rule.create_quadrature_space(function_space.mesh)
 
 #         p_l = df.fem.Function(self.QS)
@@ -272,8 +274,8 @@ class CDMPlaneStrainX(CDMX3D):
 #         self.p_nl = df.fem.Function(function_space)
 #         self.dp_nl = df.fem.Function(function_space)
 
-#         fields = {"nonlocal_strain_eq": df.fem.Function(function_space)}
-#         q_fields = {} 
+#         fields = {"equivalent_nonlocal_strain": df.fem.Function(function_space)}
+#         q_fields =  
 
 #         test_function = ufl.TestFunction(function_space)
 #         f_int_ufl = (
