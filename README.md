@@ -1,3 +1,4 @@
+![Test](https://github.com/srosenbu/comFE/actions/workflows/main.yml/badge.svg)
 # comFE
 A library for _**co**nstitutive **m**odels in **FE**niCSx_ written in Rust and Python.
 
