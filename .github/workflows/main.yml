@@ -34,9 +34,12 @@ jobs:
             python-version: 3.9
 
       - name: Update environment
-        run: mamba env update -n comfe -f environment.yml
+        shell: bash -l {0}
+        run: |
+          mamba env update -n comfe -f environment.yml
 
       - name: Run tests
-        #shell: bash -l {0}
-        run: pytest
+        shell: bash -l {0}
+        run: |
+          pytest
 
