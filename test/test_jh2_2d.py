@@ -1,18 +1,9 @@
-"""
-WARNING: DOES NOT RUN WITH MPI
-"""
-import sys
-
-# import pandas as pd
 import numpy as np
 import dolfinx as dfx
 import comfe as co
 import basix
 import ufl
-import matplotlib.pyplot as plt
-import matplotlib
 from scipy.spatial import KDTree
-matplotlib.use("Agg", force=True)
 import pytest 
 from mpi4py import MPI
 
@@ -454,7 +445,7 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
         dfx.fem.locate_dofs_topological(P1.sub(i), mesh.topology.dim - 1, facet)
         for facet, i in zip(boundary_facets, subspaces)
     ]
-    # bc_dofs = [dfx.fem.locate_dofs_geometrical(P1, domain) for domain in domains]
+
 
     bcs = [
         dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i))
@@ -486,66 +477,44 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     M_action.ghostUpdate()
 
     solver = co.cdm.CDMPlaneStrainX(P1, 0, None, bcs, M_function, law, rule, additional_output=["mises_stress", "pressure", "equivalent_plastic_strain"])
-    #print(solver.model.input.keys(), solver.model.output.keys())
     solver.model.input["density"].vector.array[:] += parameters["RHO"]
     solver.model.output["density"].vector.array[:] += parameters["RHO"]
     s_eq_ = []
     p_ = []
-    #del_p = []
-    #damage = []
-    #counter = 0
-    total_mass = 1000.0**2 * parameters["RHO"]
-    while solver.t < t_end:  # and counter <= 2000:
+    
+    while solver.t < t_end:
         solver.step(h)
         u_ = max(abs(solver.fields["u"].vector.array))
-
-        density = total_mass / (1000 * (1000.0 - u_))
-        #print(solver.fields["u"].vector.array)
-        #print("densities:",(density-solver.q_fields["density"].vector.array[0])/density)
-        #s_mean = np.mean(
-        #    solver.q_fields["mandel_stress"].vector.array.reshape((-1, 6)), axis=0
-        #)
-        #p = -(1 / 3) * np.sum(s_mean[:3])
-        #s_dev = s_mean + np.array([p, p, p, 0.0, 0.0, 0.0])
-        #s_eq = (1.5 * np.inner(s_dev, s_dev)) ** 0.5
         p_.append(solver.q_fields["pressure"].vector.array[0])
         s_eq_.append(solver.q_fields["mises_stress"].vector.array[0])
     
     values = [0.0, 0.0, 0.0, -v_bc]
     subspaces = [0, 0, 1, 1]
-    #sys.exit()
+    
     bcs = [
         dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i))
         for value, dofs, i in zip(values, bc_dofs, subspaces)
     ]
     solver.bcs = bcs
+
     while solver.t < 2.0 * t_end:  # and counter <= 2000:
         solver.step(h)
         u_ = max(abs(solver.fields["u"].vector.array))
-
-        density = total_mass / (1000 * (1000.0 - u_))
-        
-        #s_mean = np.mean(
-        #    solver.q_fields["mandel_stress"].vector.array.reshape((-1, 6)), axis=0
-        #)
-        #p = -(1 / 3) * np.sum(s_mean[:3])
-        #s_dev = s_mean + np.array([p, p, p, 0.0, 0.0, 0.0])
-        #s_eq = (1.5 * np.inner(s_dev, s_dev)) ** 0.5
-        #p_.append(p)
-        #s_eq_.append(s_eq)
         p_.append(solver.q_fields["pressure"].vector.array[0])
         s_eq_.append(solver.q_fields["mises_stress"].vector.array[0])
+    
     p_ = np.array(p_).reshape((-1, 1))
     s_eq_ = np.array(s_eq_).reshape((-1, 1))
+    
     points = np.hstack((p_, s_eq_))
     tree = KDTree(points)
     distances = tree.query(test_case["points"])
     assert np.mean(distances[0]/np.max(np.abs(test_case["points"][:,1]))) < 0.05
-    #for p, mises in test_case["points"]:
-    #    index = tree.query(p)
-    #    assert np.isclose(p, y_i(x, parameters))
-    #    assert np.isclose(s_eq, y_f(x, parameters))
+    
     if plot is not None:
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use("Agg", force=True)
         p_debug = np.linspace(0.0, 8.0, 100)
         plt.plot(p_debug, y_i(p_debug, parameters))
         plt.plot(p_debug, y_f(p_debug, parameters))
