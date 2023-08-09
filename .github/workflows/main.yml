@@ -1,0 +1,12 @@
+- name: setup-micromamba
+  uses: mamba-org/setup-micromamba@v1.4.3
+    with:
+    micromamba-version: '1.3.1-0'
+    environment-file: environment.yml
+    init-shell: >-
+      bash
+    cache-environment: true
+    post-cleanup: 'all'
+- name: tests
+  run: pytest
+  shell: micromamba-shell {0}
