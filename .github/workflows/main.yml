@@ -29,7 +29,7 @@ jobs:
         with:
             miniforge-variant: Mambaforge
             miniforge-version: latest
-            activate-environment: reinforcement
+            activate-environment: comfe
             use-mamba: true
             python-version: 3.9
 
