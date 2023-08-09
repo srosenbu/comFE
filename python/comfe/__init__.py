@@ -7,3 +7,4 @@ from .laws import (
     PyLinElas3D,
 )
 from .cdm import CDMPlaneStrainX, CDMX3D
+from .helpers import (QuadratureRule, QuadratureEvaluator)

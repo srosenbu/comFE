@@ -72,7 +72,7 @@ class CDMX3D(ExplicitMechanicsSolver):
         quadrature_rule: QuadratureRule,
         #nonlocal_var: NonlocalInterface | None = None,
         additional_output: list[str] | None = None,
-    ):
+    )->None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
         u = df.fem.Function(function_space, name="Displacements")
