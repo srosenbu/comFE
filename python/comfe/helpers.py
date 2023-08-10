@@ -123,6 +123,16 @@ def basix_cell_type_to_ufl(cell_type: basix.CellType) -> ufl.Cell:
     }
     return conversion[cell_type]
 
+def ufl_cell_to_basix(cell: ufl.Cell) -> basix.CellType:
+    conversion = {
+        ufl.interval: basix.CellType.interval,
+        ufl.triangle: basix.CellType.triangle,
+        ufl.tetrahedron: basix.CellType.tetrahedron,
+        ufl.quadrilateral: basix.CellType.quadrilateral,
+        ufl.hexahedron: basix.CellType.hexahedron,
+    }
+    return conversion[cell]
+
 
 class QuadratureEvaluator:
     def __init__(self, ufl_expression, mesh, quadrature_rule):
@@ -166,8 +176,9 @@ def project(v, V, dx, u=None):
 
 
 def diagonal_mass(
-    function_space, rho, cell_type=basix.CellType.quadrilateral, invert=True
-):
+    function_space, rho, invert=True
+)->df.fem.Function:
+    cell_type = ufl_cell_to_basix(function_space.mesh.ufl_cell())
     if cell_type in [
         basix.CellType.interval,
         basix.CellType.quadrilateral,
@@ -175,18 +186,22 @@ def diagonal_mass(
     ]:
         # do gll integration
         # todo:adapt for higher order elements
+        p_degree_to_q_degree = {1: 1, 2: 2}
         V_degree = function_space.ufl_element().degree()
-        degree = 1 if V_degree == 1 else 2
+
+        degree = p_degree_to_q_degree[V_degree]
+
         rule = QuadratureRule(
             quadrature_type=basix.QuadratureType.gll, cell_type=cell_type, degree=degree
         )
+
         u_ = ufl.TestFunction(function_space)
         v_ = ufl.TrialFunction(function_space)
         mass_form = ufl.inner(u_, v_) * rho * rule.dx
-
-        M = df.fem.petsc.assemble_matrix(df.fem.form(mass_form))
+        M_action = df.fem.Function(function_space)
+        M =df.fem.petsc.assemble_matrix(df.fem.form(mass_form))
         M.assemble()
-        M_action = M.getDiagonal()
+        M_action.vector.array[:] = M.getDiagonal().array[:]
     else:
         rule = QuadratureRule(
             quadrature_type=basix.QuadratureType.Default, cell_type=cell_type, degree=1
@@ -196,97 +211,15 @@ def diagonal_mass(
         mass_form = ufl.inner(u_, v_) * rho * rule.dx
         v_temp = df.fem.Function(function_space)
         ones = v_temp.vector.copy()
-        # mass_action = df.fem.form(ufl.action(mass_form, ))
-
+        M_action = df.fem.Function(function_space)
         M = df.fem.petsc.assemble_matrix(df.fem.form(mass_form))
         M.assemble()
         with ones.localForm() as ones_local:
             ones_local.set(1.0)
-        M_action = M * ones
+        M_action.vector.array = (M * ones).array
     if invert:
-        M_action.array[:] = 1.0 / M_action.array
-        M_action.ghostUpdate()
+        M_action.vector.array[:] = 1.0 / M_action.vector.array
     return M_action
-
-
-class TimestepEstimator:
-    def __init__(self, mesh, G, K, rho, safety_factor=1.0, order=1):
-        self.del_t = 0.0
-        self.eig_max = 0.0
-        self.safety_factor = safety_factor
-        self.mesh = mesh
-        self.cell_type = self.mesh.topology.cell_type
-        if self.cell_type == df.mesh.CellType.triangle:
-            raise TypeError(
-                'Cell type "' + str(self.cell_type) + '" is not yet supported'
-            )
-        elif self.cell_type == df.mesh.CellType.quadrilateral:
-            self.h_mesh = df.mesh.create_unit_square(
-                MPI.COMM_SELF,
-                1,
-                1,
-                cell_type=self.cell_type,
-            )
-        else:
-            raise TypeError(
-                'Cell type "' + str(self.cell_type) + '" is not yet supported'
-            )
-
-        self.G = df.fem.Constant(self.h_mesh, G)
-        self.K = df.fem.Constant(self.h_mesh, K)
-        fdim = self.mesh.topology.dim
-        self.mesh.topology.create_connectivity(fdim, 0)
-
-        num_cells_owned_by_proc = self.mesh.topology.index_map(fdim).size_local
-        self.cells = df.cpp.mesh.entities_to_geometry(
-            self.mesh, fdim, np.arange(num_cells_owned_by_proc, dtype=np.int32), False
-        )
-
-        def eps(v):
-            return ufl.sym(ufl.grad(v))
-
-        def sigma(v):
-            e = eps(v)
-            return (self.K - (2.0 / 3.0) * self.G) * ufl.tr(e) * ufl.Identity(
-                2
-            ) + 2.0 * self.G * e
-
-        h_P1 = df.fem.VectorFunctionSpace(self.h_mesh, ("CG", order))
-        h_P1s = df.fem.FunctionSpace(self.h_mesh, ("CG", order))
-        h_u, h_v = ufl.TrialFunction(h_P1), ufl.TestFunction(h_P1)
-        self.K_form = df.fem.form(ufl.inner(eps(h_u), sigma(h_v)) * ufl.dx)
-        self.M_form = df.fem.form(rho * ufl.inner(h_u, h_v) * ufl.dx)
-        one = df.fem.Function(h_P1s)
-        one.x.array[:] = np.ones_like(one.x.array, dtype=np.float64)
-        self.V_form = df.fem.form(one * ufl.dx)
-        self.h_cell = df.cpp.mesh.entities_to_geometry(
-            self.h_mesh, fdim, np.arange(1, dtype=np.int32), False
-        )
-        # points = self.mesh.geometry.x
-        # for e, entity in enumerate(geometry_entitites):
-        #    print(e, points[entity])
-
-    def __call__(self, G=None, K=None):
-        self.G.value = G if G is not None else self.G.value
-        self.K.value = K if K is not None else self.K.value
-        h_K, h_M = (
-            df.fem.petsc.assemble_matrix(self.K_form),
-            df.fem.petsc.assemble_matrix(self.M_form),
-        )
-        for cell in self.cells:
-            h_K.zeroEntries()
-            h_M.zeroEntries()
-            self.h_mesh.geometry.x[self.h_cell] = self.mesh.geometry.x[cell]
-            df.fem.petsc.assemble_matrix(h_K, self.K_form)
-            df.fem.petsc.assemble_matrix(h_M, self.M_form)
-            h_K.assemble()
-            h_M.assemble()
-            h_M_array = np.array(h_M[:, :])
-            h_K_array = np.array(h_K[:, :])
-            eig_temp = np.linalg.norm(eigvals(h_K_array, h_M_array), np.inf)
-            self.eig_max = max(eig_temp, self.eig_max)
-        self.del_t = self.safety_factor * 2.0 / self.eig_max**0.5
-        return self.del_t
 
 
 def critical_timestep(
@@ -300,7 +233,7 @@ def critical_timestep(
             np.array([[0.0, 0.0], [l_x, l_y]]),
             [1, 1],
             cell_type=cell_type,
-            diagonal=DiagonalType.crossed,
+            diagonal=df.cpp.mesh.DiagonalType.crossed,
         )
     elif cell_type == df.mesh.CellType.quadrilateral:
         h_mesh = df.mesh.create_rectangle(
@@ -348,7 +281,7 @@ def critical_timestep_nonlocal(
             np.array([[0.0, 0.0], [l_x, l_y]]),
             [1, 1],
             cell_type=cell_type,
-            diagonal=DiagonalType.crossed,
+            diagonal=df.cpp.mesh.DiagonalType.crossed,
         )
     elif cell_type == df.mesh.CellType.quadrilateral:
         h_mesh = df.mesh.create_rectangle(
@@ -380,14 +313,3 @@ def critical_timestep_nonlocal(
 
     h = 2.0 / max_eig**0.5
     return h
-
-
-# uncomment once cell_avg is supported in dolfinx
-# def b_bar_strain(u):
-#     eps = ufl.sym(ufl.grad(u))
-#     vol = (1/3) * ufl.cell_avg(ufl.tr(eps))
-#     return eps +(vol - (1/3) * ufl.tr(eps)) * ufl.Identity(2)
-# def critical_timestep_lanczos():
-#    from slepc4py import SLEPc
-#    from petsc4py import PETSc
-#    PETSc.KSP()
