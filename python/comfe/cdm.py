@@ -19,7 +19,7 @@ __all__ = [
     "CDMNonlocalMechanics",
     "CDMSolver",
     "NonlocalInterface",
-    "CDMNonlocalBalance",
+    "CDMNonlocal",
 ]
 
 
@@ -216,6 +216,7 @@ class CDMX3D(ExplicitMechanicsSolver):
         L = self.model.input["velocity_gradient"]
         sigma = self.model.input["mandel_stress"]
         self.L_evaluator(L)
+        # print(sigma.vector.array)
 
         jaumann_rotation(h, L.vector.array, sigma.vector.array)
 
