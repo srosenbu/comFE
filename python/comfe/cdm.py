@@ -44,6 +44,9 @@ class CDMNonlocalMechanics(CDMSolver):
     fields: dict[str, df.fem.Function]
     q_fields: dict[str, df.fem.Function]
 
+    class Config:
+        arbitrary_types_allowed = True
+
     def __init__(
         self,
         velocity_space: df.fem.FunctionSpace,
