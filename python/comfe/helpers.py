@@ -1,11 +1,18 @@
+import basix
+import dolfinx as df
 import numpy as np
 import ufl
 from mpi4py import MPI
 from scipy.linalg import eigvals
 
-import basix
-import dolfinx as df
-
+__all__ = [
+    "QuadratureRule",
+    "set_mesh_coordinates",
+    "QuadratureEvaluator",
+    "diagonal_mass",
+    "critical_timestep",
+    "critical_timestep_nonlocal",
+]
 # class Spaces:
 #     _self = None
 #     _spaces = None
@@ -22,7 +29,7 @@ import dolfinx as df
 
 #     def __getitem__(self, key: tuple[str, int | tuple[int,int]]) -> df.fem.FunctionSpace:
 #         return self._spaces[key]
-    
+
 #     #def __setitem__(self, key: tuple[str, int | tuple[int,int]], space: df.fem.FunctionSpace)->None:
 #     #    if key in self._spaces:
 #     #        raise Exception(f"A {key[0]} space of dimension {key[1]} already exists. Please remove the extra space from your code.")
@@ -30,7 +37,6 @@ import dolfinx as df
 #     #        self._spaces[key] = space
 
 #     def create_quadrature_space(self, dim: int | tuple[int, int], rule:QuadratureRule) ->
-        
 
 
 def set_mesh_coordinates(mesh, x, mode="set"):
@@ -52,9 +58,7 @@ class QuadratureRule:
         self.quadrature_type = quadrature_type
         self.cell_type = cell_type
         self.degree = degree
-        self.points, self.weights = basix.make_quadrature(
-            self.quadrature_type, self.cell_type, self.degree
-        )
+        self.points, self.weights = basix.make_quadrature(self.quadrature_type, self.cell_type, self.degree)
         self.dx = ufl.dx(
             metadata={
                 "quadrature_rule": self.quadrature_type.name,
@@ -104,13 +108,9 @@ class QuadratureRule:
         if len(element.value_shape()) == 0:
             return self.create_quadrature_space(function_space.mesh)
         elif len(element.value_shape()) == 1:
-            return self.create_quadrature_vector_space(
-                function_space.mesh, element.value_shape()[0]
-            )
+            return self.create_quadrature_vector_space(function_space.mesh, element.value_shape()[0])
         elif len(element.value_shape()) == 2:
-            return self.create_quadrature_tensor_space(
-                function_space.mesh, element.value_shape()
-            )
+            return self.create_quadrature_tensor_space(function_space.mesh, element.value_shape())
 
 
 def basix_cell_type_to_ufl(cell_type: basix.CellType) -> ufl.Cell:
@@ -122,6 +122,7 @@ def basix_cell_type_to_ufl(cell_type: basix.CellType) -> ufl.Cell:
         basix.CellType.hexahedron: ufl.hexahedron,
     }
     return conversion[cell_type]
+
 
 def ufl_cell_to_basix(cell: ufl.Cell) -> basix.CellType:
     conversion = {
@@ -141,9 +142,7 @@ class QuadratureEvaluator:
         try:
             assert map_c.num_ghosts == 0
         except AssertionError as e:
-            print(
-                f"Warning: In QuadratureEvaluator: There are {map_c.num_ghosts} Quadrature ghost points."
-            )
+            print(f"Warning: In QuadratureEvaluator: There are {map_c.num_ghosts} Quadrature ghost points.")
 
         self.cells = np.arange(0, self.num_cells, dtype=np.int32)
 
@@ -155,9 +154,7 @@ class QuadratureEvaluator:
         elif type(q) == np.ndarray:
             self.expr.eval(self.cells, values=q.reshape(self.num_cells, -1))
         else:
-            self.expr.eval(
-                self.cells, values=q.vector.array.reshape(self.num_cells, -1)
-            )
+            self.expr.eval(self.cells, values=q.vector.array.reshape(self.num_cells, -1))
             q.x.scatter_forward()
 
 
@@ -175,9 +172,7 @@ def project(v, V, dx, u=None):
         solver.solve()
 
 
-def diagonal_mass(
-    function_space, rho, invert=True
-)->df.fem.Function:
+def diagonal_mass(function_space, rho, invert=True) -> df.fem.Function:
     cell_type = ufl_cell_to_basix(function_space.mesh.ufl_cell())
     if cell_type in [
         basix.CellType.interval,
@@ -191,21 +186,17 @@ def diagonal_mass(
 
         degree = p_degree_to_q_degree[V_degree]
 
-        rule = QuadratureRule(
-            quadrature_type=basix.QuadratureType.gll, cell_type=cell_type, degree=degree
-        )
+        rule = QuadratureRule(quadrature_type=basix.QuadratureType.gll, cell_type=cell_type, degree=degree)
 
         u_ = ufl.TestFunction(function_space)
         v_ = ufl.TrialFunction(function_space)
         mass_form = ufl.inner(u_, v_) * rho * rule.dx
         M_action = df.fem.Function(function_space)
-        M =df.fem.petsc.assemble_matrix(df.fem.form(mass_form))
+        M = df.fem.petsc.assemble_matrix(df.fem.form(mass_form))
         M.assemble()
         M_action.vector.array[:] = M.getDiagonal().array[:]
     else:
-        rule = QuadratureRule(
-            quadrature_type=basix.QuadratureType.Default, cell_type=cell_type, degree=1
-        )
+        rule = QuadratureRule(quadrature_type=basix.QuadratureType.Default, cell_type=cell_type, degree=1)
         u_ = ufl.TestFunction(function_space)
         v_ = ufl.TrialFunction(function_space)
         mass_form = ufl.inner(u_, v_) * rho * rule.dx
@@ -222,9 +213,7 @@ def diagonal_mass(
     return M_action
 
 
-def critical_timestep(
-    l_x, l_y, G, K, rho, cell_type=df.mesh.CellType.quadrilateral, order=1
-):
+def critical_timestep(l_x, l_y, G, K, rho, cell_type=df.mesh.CellType.quadrilateral, order=1):
     # todo: implement other cell_types
     # cell_type=mesh.topology.cell_type
     if cell_type == df.mesh.CellType.triangle:
@@ -271,9 +260,7 @@ def critical_timestep(
     return h
 
 
-def critical_timestep_nonlocal(
-    l_x, l_y, l, zeta, cell_type=df.mesh.CellType.quadrilateral, rule=None, order=1
-):
+def critical_timestep_nonlocal(l_x, l_y, l, zeta, cell_type=df.mesh.CellType.quadrilateral, rule=None, order=1):
     # todo: implement other cell_types
     if cell_type == df.mesh.CellType.triangle:
         h_mesh = df.mesh.create_rectangle(
@@ -295,9 +282,7 @@ def critical_timestep_nonlocal(
     dx = rule.dx if rule is not None else ufl.dx
     h_P1 = df.fem.FunctionSpace(h_mesh, ("CG", order))
     h_u, h_v = ufl.TrialFunction(h_P1), ufl.TestFunction(h_P1)
-    K_form = df.fem.form(
-        (l**2 * ufl.inner(ufl.grad(h_u), ufl.grad(h_v)) + h_u * h_v) * ufl.dx
-    )
+    K_form = df.fem.form((l**2 * ufl.inner(ufl.grad(h_u), ufl.grad(h_v)) + h_u * h_v) * ufl.dx)
     M_form = df.fem.form(zeta * ufl.inner(h_u, h_v) * ufl.dx)
 
     h_K, h_M = (

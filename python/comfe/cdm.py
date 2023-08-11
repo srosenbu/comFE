@@ -1,24 +1,26 @@
-# import warnings
+import math
+from abc import ABC, abstractmethod
+from typing import Callable, Type
 
+import dolfinx as df
 import numpy as np
 import ufl
 from petsc4py import PETSc
-import basix
-
-import dolfinx as df
-import ufl
-from .helpers import (
-    QuadratureRule,
-    QuadratureEvaluator,
-    set_mesh_coordinates,
-    diagonal_mass,
-)
 from pydantic import BaseModel
-from .laws import RustConstitutiveModel, ConstitutiveModel
+
 from .comfe import jaumann_rotation
-from typing import Callable, Type
-from abc import abstractmethod, ABC
-import math
+from .helpers import QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
+from .laws import ConstitutiveModel, RustConstitutiveModel
+
+__all__ = [
+    "ExplicitMechanicsSolver",
+    "CDMX3D",
+    "CDMPlaneStrainX",
+    "CDMNonlocalMechanics",
+    "CDMSolver",
+    "NonlocalInterface",
+    "CDMNonlocalBalance",
+]
 
 
 class ExplicitMechanicsSolver(BaseModel, ABC):
@@ -100,7 +102,7 @@ class CDMNonlocalMechanics(CDMSolver):
         fields = mechanics_solver.fields.copy()
         for key, field in nonlocal_solver.fields.items():
             fields[key] = field
-        
+
         super().__init__(
             nonlocal_solver=nonlocal_solver,
             mechanics_solver=mechanics_solver,
@@ -236,18 +238,12 @@ class CDMX3D(ExplicitMechanicsSolver):
             f_local.set(0.0)
         df.fem.petsc.assemble_vector(self.fields["f"].vector, self.f_int_form)
         # TODO
-        self.fields["f"].vector.ghostUpdate(
-            addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE
-        )
+        self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
 
         if self.external_forces is not None:
-            self.fields["f"].vector.array[:] += self.external_forces(
-                self.t
-            ).vector.array
+            self.fields["f"].vector.array[:] += self.external_forces(self.t).vector.array
             # TODO
-            self.fields["f"].vector.ghostUpdate(
-                addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD
-            )
+            self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD)
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
         # Advance velocities and nodal positions in time
@@ -258,9 +254,7 @@ class CDMX3D(ExplicitMechanicsSolver):
         #    c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
         #    c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
 
-        self.fields["v"].vector.array[:] += (
-            del_t_mid * self.M.vector.array * self.fields["f"].vector.array
-        )
+        self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
 
         df.fem.set_bc(self.fields["v"].vector, self.bcs)
         # ghost entries are needed
@@ -285,9 +279,7 @@ class CDMX3D(ExplicitMechanicsSolver):
 
 class CDMPlaneStrainX(CDMX3D):
     def _as_3d_tensor(self, T):
-        return ufl.as_matrix(
-            [[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]]
-        )
+        return ufl.as_matrix([[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]])
 
     def _as_mandel(self, T):
         """
@@ -341,10 +333,7 @@ class CDMNonlocal(NonlocalInterface):
 
         fields = {
             Q_nonlocal: df.fem.Function(function_space, name=Q_nonlocal),
-            "integral_"
-            + Q_nonlocal: df.fem.Function(
-                function_space, name="integral_" + Q_nonlocal
-            ),
+            "integral_" + Q_nonlocal: df.fem.Function(function_space, name="integral_" + Q_nonlocal),
             "f": df.fem.Function(function_space, name="f"),
         }
 
@@ -352,16 +341,12 @@ class CDMNonlocal(NonlocalInterface):
 
         if "damage" in Q_local:
             eta, R = parameters["eta"], parameters["R"]
-            g = (
-                (1.0 - R) * ufl.exp(-eta * q_fields["damage"]) + R - math.exp(-eta)
-            ) / (1.0 - math.exp(-eta))
+            g = ((1.0 - R) * ufl.exp(-eta * q_fields["damage"]) + R - math.exp(-eta)) / (1.0 - math.exp(-eta))
         else:
             g = 1.0
 
         f_int_ufl = (
-            g
-            * parameters["l"] ** 2
-            * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
+            g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
             + fields[Q_nonlocal] * test_function
         ) * quadrature_rule.dx
 
@@ -371,9 +356,7 @@ class CDMNonlocal(NonlocalInterface):
 
         f_form = df.fem.form(f_ufl)
 
-        rate_evaluator = QuadratureEvaluator(
-            fields[Q_nonlocal], function_space.mesh, quadrature_rule
-        )
+        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal], function_space.mesh, quadrature_rule)
         super().__init__(
             Q_local=Q_local,
             Q_nonlocal=Q_nonlocal,
@@ -398,13 +381,10 @@ class CDMNonlocal(NonlocalInterface):
         c2 = 2.0 * h / (2.0 + c * h)
 
         self.fields[self.Q_nonlocal].vector.array[:] = (
-            c1 * self.fields[self.Q_nonlocal].vector.array
-            + c2 * self.M.vector.array * self.fields["f"].vector.array
+            c1 * self.fields[self.Q_nonlocal].vector.array + c2 * self.M.vector.array * self.fields["f"].vector.array
         )
 
-        self.fields["integral_" + self.Q_nonlocal].vector.array[:] += (
-            h * self.fields[self.Q_nonlocal].vector.array
-        )
+        self.fields["integral_" + self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal].vector.array
 
         self.rate_evaluator(self.q_fields[self.Q_nonlocal])
 

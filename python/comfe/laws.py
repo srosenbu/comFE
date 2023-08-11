@@ -1,11 +1,22 @@
-from .comfe import PyLinElas3D, PyJH23D, PyLinearElastic3D
-import dolfinx as df
-from pydantic import BaseModel
-import numpy as np
-from .helpers import QuadratureRule
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
-RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D
+import dolfinx as df
+import numpy as np
+from pydantic import BaseModel
+
+from .comfe import PyGradientJH23D, PyJH23D, PyLinearElastic3D, PyLinElas3D
+from .helpers import QuadratureRule
+
+__all__ = [
+    "RustConstitutiveModel",
+    "QuadratureModel",
+    "ConstitutiveModel",
+    "PyLinElas3D",
+    "PyJH23D",
+    "PyGradientJH23D",
+    "PyLinearElastic3D",
+]
+RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D
 
 
 class QuadratureModel(ABC):
@@ -40,12 +51,8 @@ class ConstitutiveModel(BaseModel):
         ips: np.ndarray[np.uint64] | None = None,
         additional_variables: list[str] | None = None,
     ) -> None:
-        input, output, spaces = ceate_input_and_output(
-            model, rule, mesh, None, additional_variables
-        )
-        super().__init__(
-            rs_object=model, input=input, output=output, ips=ips, spaces=spaces
-        )
+        input, output, spaces = ceate_input_and_output(model, rule, mesh, None, additional_variables)
+        super().__init__(rs_object=model, input=input, output=output, ips=ips, spaces=spaces)
 
     def evaluate(self, del_t=1.0) -> None:
         input = {key: value.vector.array for key, value in self.input.items()}
@@ -75,11 +82,7 @@ def ceate_input_and_output(
     mesh: df.mesh.Mesh,
     spaces: dict[int | tuple[int, int], df.fem.FunctionSpace] | None = None,
     optional_variables: list[str] | None = None,
-) -> tuple[
-    dict[str, np.ndarray],
-    dict[str, np.ndarray],
-    dict[int | tuple[int, int], df.fem.FunctionSpace],
-]:
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int | tuple[int, int], df.fem.FunctionSpace],]:
     inputs = model.define_input()
     outputs = model.define_output()
     inputs.update(model.define_history())

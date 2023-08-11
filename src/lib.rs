@@ -392,6 +392,7 @@ fn py_jaumann_rotation_expensive(
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
     impl_constitutive_model!(PyJH23D, JH23D, m);
+    impl_constitutive_model!(PyGradientJH23D, GradientJH23D, m);
     impl_constitutive_model!(PyLinElas3D, LinearElastic3D, m);
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
