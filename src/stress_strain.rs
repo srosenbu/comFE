@@ -1,4 +1,4 @@
-use nalgebra::{DVectorView, DVectorViewMut, SMatrix, SVector};
+use nalgebra::{DVectorView, DVectorViewMut, SMatrix, SVector, vector};
 
 pub fn tensor_to_mandel(tensor: SMatrix<f64, 3, 3>) -> SVector<f64, 6> {
     //TODO: This is a hack. Replace once https://github.com/rust-lang/rust/issues/57241 is solved
@@ -111,6 +111,7 @@ pub fn jaumann_rotation(
     stress: &mut DVectorViewMut<f64>,
 ) {
     const FACTOR: f64 = 0.7071067811865475; // 1/sqrt(2)
+    let factor_del_t = FACTOR * del_t;
     let n = velocity_gradient.len() / 9;
     let m = stress.len() / 6;
     assert!(
@@ -118,36 +119,31 @@ pub fn jaumann_rotation(
         "Velocity gradient and stress must have the same number of elements"
     );
     for i in 0..n {
-        let vel_grad = SMatrix::<f64, 3, 3>::from_row_slice(
-            velocity_gradient.fixed_view::<9, 1>(i * 9, 0).as_slice(),
-        );
-        let mut stress_view = stress.fixed_view_mut::<6, 1>(i * 6, 0);
+        //let vel_grad = SMatrix::<f64, 3, 3>::from_row_slice(
+        //    velocity_gradient.fixed_view::<9, 1>(i * 9, 0).as_slice(),
+        //);
+        let vel_grad = velocity_gradient.fixed_view::<9,1>(i * 9, 0);
 
-        let differences: [f64; 3] = [
-            vel_grad.m12 - vel_grad.m21,
-            vel_grad.m13 - vel_grad.m31,
-            vel_grad.m23 - vel_grad.m32,
-        ];
+        let mut stress_view = stress.fixed_view_mut::<6, 1>(i * 6, 0);
+        //let v1 = vector![vel_grad.m12, vel_grad.m13, vel_grad.m23];
+        //let v2 = vector![vel_grad.m21, vel_grad.m31, vel_grad.m32];
+
+        // unsafe is okay because we index the fixed view of length 9. Bounds have been checked by fixed_view
+        //let v1 = unsafe{vector![*vel_grad.get_unchecked(1), *vel_grad.get_unchecked(2), *vel_grad.get_unchecked(5)]};
+        //let v2 = unsafe{vector![*vel_grad.get_unchecked(3), *vel_grad.get_unchecked(6), *vel_grad.get_unchecked(7)]};
+        //let v2 = vector![vel_grad_row_slice[3], vel_grad_row_slice[6], vel_grad_row_slice[7]];
+        //let diff = 0.5 * (v1 - v2);
+        let diff:[f64; 3] = unsafe{[*vel_grad.get_unchecked(1) - *vel_grad.get_unchecked(3), *vel_grad.get_unchecked(2) - *vel_grad.get_unchecked(6), *vel_grad.get_unchecked(5) - *vel_grad.get_unchecked(7)]};
+        
+        //let diff = vel_grad - vel_grad.transpose();
+        //let differences: [f64; 3] = [diff.m12, diff.m13, diff.m23];
         let stress_i = SVector::<f64, 6>::from_column_slice(stress_view.as_slice());
-        stress_view.x +=
-            del_t * FACTOR * (stress_i.a * differences[1] + stress_i.b * differences[0]);
-        stress_view.y +=
-            del_t * FACTOR * (stress_i.w * differences[2] - stress_i.b * differences[0]);
-        stress_view.z +=
-            del_t * FACTOR * (-stress_i.w * differences[2] - stress_i.a * differences[1]);
-        stress_view.w += del_t
-            * FACTOR
-            * (-stress_i.y * differences[2] + stress_i.z * differences[2]
-                - FACTOR * (stress_i.a * differences[0] + stress_i.b * differences[1]));
-        stress_view.a += del_t
-            * FACTOR
-            * (-stress_i.x * differences[1] + stress_i.z * differences[1]
-                + FACTOR * (stress_i.w * differences[0] - stress_i.b * differences[2]));
-        stress_view.b += del_t
-            * FACTOR
-            * (-stress_i.x * differences[0]
-                + stress_i.y * differences[0]
-                + FACTOR * (stress_i.w * differences[1] + stress_i.a * differences[2]));
+        stress_view.x += factor_del_t * (stress_i.a * diff[1] + stress_i.b * diff[0]);
+        stress_view.y += factor_del_t * (stress_i.w * diff[2] - stress_i.b * diff[0]);
+        stress_view.z += factor_del_t * (-stress_i.w * diff[2] - stress_i.a * diff[1]);
+        stress_view.w += factor_del_t * (stress_i.z * diff[2] -stress_i.y * diff[2] - FACTOR * (stress_i.a * diff[0] + stress_i.b * diff[1]));
+        stress_view.a += factor_del_t * (stress_i.z * diff[1] -stress_i.x * diff[1] + FACTOR * (stress_i.w * diff[0] - stress_i.b * diff[2]));
+        stress_view.b += factor_del_t * (stress_i.y * diff[0] -stress_i.x * diff[0] + FACTOR * (stress_i.w * diff[1] + stress_i.a * diff[2]));
     }
 }
 

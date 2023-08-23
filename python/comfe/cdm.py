@@ -8,7 +8,7 @@ import ufl
 from petsc4py import PETSc
 from pydantic import BaseModel
 
-from .comfe import jaumann_rotation
+from .comfe import jaumann_rotation  # , jaumann_rotation_expensive
 from .helpers import QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
 from .laws import ConstitutiveModel, RustConstitutiveModel
 
@@ -212,6 +212,7 @@ class CDMX3D(ExplicitMechanicsSolver):
             ]
         )
 
+    @profile
     def stress_update(self, h):
         L = self.model.input["velocity_gradient"]
         sigma = self.model.input["mandel_stress"]
