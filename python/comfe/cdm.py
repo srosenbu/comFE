@@ -212,7 +212,6 @@ class CDMX3D(ExplicitMechanicsSolver):
             ]
         )
 
-    @profile
     def stress_update(self, h):
         L = self.model.input["velocity_gradient"]
         sigma = self.model.input["mandel_stress"]
