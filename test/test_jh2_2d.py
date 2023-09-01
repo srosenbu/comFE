@@ -467,7 +467,7 @@ def test_single_element_2d(test_case: dict, plot: str | None = None) -> None:
     M_action.array[:] = 1.0 / M_action.array
     M_action.ghostUpdate()
 
-    solver = co.cdm.CDMPlaneStrainX(
+    solver = co.cdm.CDMPlaneStrain(
         P1,
         0,
         None,

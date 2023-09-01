@@ -5,7 +5,7 @@ from typing import Callable, Type
 import dolfinx as df
 import numpy as np
 import ufl
-from dolfinx.cpp.la import InsertMode
+from dolfinx.cpp.la import ScatterMode
 from petsc4py import PETSc
 from pydantic import BaseModel
 
@@ -168,12 +168,14 @@ class CDM3D(CDMSolver):
             f_local.set(0.0)
         df.fem.petsc.assemble_vector(self.fields["f"].vector, self.f_int_form)
         # TODO
-        self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
+        # self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
+        self.fields["f"].x.scatter_reverse(ScatterMode.add)
 
         if self.external_forces is not None:
             self.fields["f"].vector.array[:] += self.external_forces(self.t).vector.array
             # TODO
-            self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD)
+            # self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD)
+            self.fields["f"].x.scatter_forward()
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
         # Advance velocities and nodal positions in time
@@ -185,11 +187,13 @@ class CDM3D(CDMSolver):
         #    c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
 
         self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
+        self.fields["v"].x.scatter_forward()
 
         df.fem.set_bc(self.fields["v"].vector, self.bcs)
         # ghost entries are needed
         self.fields["v"].x.scatter_forward()
         # use v.x instead of v.vector, since mesh update requires ghost entries
+
         du_half = (0.5 * self.del_t) * self.fields["v"].x.array
 
         set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
@@ -201,6 +205,7 @@ class CDM3D(CDMSolver):
         self.stress_update(self.del_t)
 
         self.fields["u"].x.array[:] += 2.0 * du_half
+        self.fields["u"].x.scatter_forward()
 
         set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
 
@@ -392,7 +397,7 @@ class CDMNonlocal(NonlocalInterface):
             f_local.set(0.0)
 
         df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
-        self.fields["nonlocal_force"].x.scatter_reverse(InsertMode.add)
+        self.fields["nonlocal_force"].x.scatter_reverse(ScatterMode.add)
 
         c = self.parameters["gamma"] / self.parameters["zeta"]
         c1 = (2.0 - c * h) / (2.0 + c * h)
