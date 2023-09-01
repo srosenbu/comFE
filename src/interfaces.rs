@@ -21,6 +21,10 @@ pub enum Q {
     MandelTangent,
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
     VelocityGradient,
+    #[strum(serialize = "EqNonlocalPlasticStrain", serialize = "equivalent_nonlocal_plastic_strain")]
+    EqNonlocalPlasticStrain,
+    #[strum(serialize = "EqNonlocalPlasticStrainRate", serialize = "equivalent_nonlocal_plastic_strain_rate")]
+    EqNonlocalPlasticStrainRate,
     #[strum(serialize = "EqNonlocalStrain", serialize = "equivalent_nonlocal_strain")]
     EqNonlocalStrain,
     #[strum(serialize = "EqNonlocalStrainRate", serialize = "equivalent_nonlocal_strain_rate")]
@@ -205,6 +209,8 @@ impl Q {
             Q::VelocityGradient => QDim::SquareTensor(3),
             Q::EqNonlocalStrain => QDim::Scalar,
             Q::EqNonlocalStrainRate => QDim::Scalar,
+            Q::EqNonlocalPlasticStrain => QDim::Scalar,
+            Q::EqNonlocalPlasticStrainRate => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,

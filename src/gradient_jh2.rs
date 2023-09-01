@@ -50,7 +50,7 @@ impl ConstitutiveModel for GradientJH23D {
         d_eps_vol *= -1.0;
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-        let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalStrainRate, ip).max(0.0);
+        let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
         let mut del_lambda = 0.0;
         
 
@@ -209,7 +209,7 @@ impl ConstitutiveModel for GradientJH23D {
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
-            (Q::EqNonlocalStrainRate, QDim::Scalar),
+            (Q::EqNonlocalPlasticStrainRate, QDim::Scalar),
         ])
     }
 

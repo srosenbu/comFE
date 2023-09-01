@@ -5,6 +5,7 @@ from typing import Callable, Type
 import dolfinx as df
 import numpy as np
 import ufl
+from dolfinx.cpp.la import InsertMode
 from petsc4py import PETSc
 from pydantic import BaseModel
 
@@ -14,8 +15,8 @@ from .laws import ConstitutiveModel, RustConstitutiveModel
 
 __all__ = [
     "ExplicitMechanicsSolver",
-    "CDMX3D",
-    "CDMPlaneStrainX",
+    "CDM3D",
+    "CDMPlaneStrain",
     "CDMNonlocalMechanics",
     "CDMSolver",
     "NonlocalInterface",
@@ -36,85 +37,13 @@ class CDMSolver(BaseModel, ABC):
 
 
 class NonlocalInterface(CDMSolver):
-    Q_local: list[str] | str
+    Q_local: str
+    Q_local_damage: str | None
     Q_nonlocal: str
+    Q_nonlocal_rate: str
 
 
-class CDMNonlocalMechanics(CDMSolver):
-    nonlocal_solver: NonlocalInterface
-    mechanics_solver: ExplicitMechanicsSolver
-    fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function]
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    def __init__(
-        self,
-        velocity_space: df.fem.FunctionSpace,
-        nonlocal_space: df.fem.FunctionSpace,
-        t0: float,
-        f_ext: Callable | None,
-        bcs: list[df.fem.DirichletBCMetaClass],
-        rust_model: RustConstitutiveModel,
-        parameters: dict[str, float],
-        nonlocal_parameters: dict[str, float],
-        Q_local: list[str] | str,
-        Q_nonlocal: str,
-        quadrature_rule: QuadratureRule,
-        mechanics_solver: Type[ExplicitMechanicsSolver],
-        additional_output: list[str] | None = None,
-        mass_mechanics: df.fem.Function | None = None,
-        mass_nonlocal: df.fem.Function | None = None,
-    ) -> None:
-        mass_mechanics = (
-            mass_mechanics
-            if mass_mechanics is not None
-            else diagonal_mass(velocity_space, parameters["rho"], invert=True)
-        )
-        mass_nonlocal = (
-            mass_nonlocal
-            if mass_nonlocal is not None
-            else diagonal_mass(nonlocal_space, nonlocal_parameters["zeta"], invert=True)
-        )
-        mechanics_solver = mechanics_solver(
-            velocity_space,
-            t0,
-            f_ext,
-            bcs,
-            mass_mechanics,
-            rust_model,
-            quadrature_rule,
-            additional_output,
-        )
-
-        nonlocal_solver = CDMNonlocal(
-            Q_local,
-            Q_nonlocal,
-            t0,
-            nonlocal_space,
-            mass_nonlocal,
-            nonlocal_parameters,
-            quadrature_rule,
-            mechanics_solver.q_fields,
-            mechanics_solver.model.input[Q_nonlocal],
-        )
-        fields = mechanics_solver.fields.copy()
-        for key, field in nonlocal_solver.fields.items():
-            fields[key] = field
-
-        super().__init__(
-            nonlocal_solver=nonlocal_solver,
-            mechanics_solver=mechanics_solver,
-            fields=fields,
-            q_fields=mechanics_solver.q_fields,
-        )
-
-    def step(self, h: float) -> None:
-        self.mechanics_solver.step(h, self.nonlocal_solver.step)
-
-
-class CDMX3D(ExplicitMechanicsSolver):
+class CDM3D(CDMSolver):
     function_space: df.fem.FunctionSpace
     t: float
     del_t: float
@@ -278,7 +207,7 @@ class CDMX3D(ExplicitMechanicsSolver):
         self.t += self.del_t
 
 
-class CDMPlaneStrainX(CDMX3D):
+class CDMPlaneStrain(CDM3D):
     def _as_3d_tensor(self, T):
         return ufl.as_matrix([[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]])
 
@@ -303,6 +232,85 @@ class CDMPlaneStrainX(CDMX3D):
         )
 
 
+class CDMNonlocalMechanics(CDMSolver):
+    nonlocal_solver: NonlocalInterface
+    mechanics_solver: CDM3D
+    fields: dict[str, df.fem.Function]
+    q_fields: dict[str, df.fem.Function]
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(
+        self,
+        velocity_space: df.fem.FunctionSpace,
+        nonlocal_space: df.fem.FunctionSpace,
+        t0: float,
+        f_ext: Callable | None,
+        bcs: list[df.fem.DirichletBCMetaClass],
+        rust_model: RustConstitutiveModel,
+        parameters: dict[str, float],
+        nonlocal_parameters: dict[str, float],
+        Q_local: str,
+        Q_local_damage: str | None,
+        Q_nonlocal: str,
+        Q_nonlocal_rate: str,
+        quadrature_rule: QuadratureRule,
+        mechanics_solver: Type[CDM3D] = CDMPlaneStrain,
+        additional_output: list[str] | None = None,
+        mass_mechanics: df.fem.Function | None = None,
+        mass_nonlocal: df.fem.Function | None = None,
+    ) -> None:
+        mass_mechanics = (
+            mass_mechanics
+            if mass_mechanics is not None
+            else diagonal_mass(velocity_space, parameters["rho"], invert=True)
+        )
+        mass_nonlocal = (
+            mass_nonlocal
+            if mass_nonlocal is not None
+            else diagonal_mass(nonlocal_space, nonlocal_parameters["zeta"], invert=True)
+        )
+        mechanics_solver = mechanics_solver(
+            velocity_space,
+            t0,
+            f_ext,
+            bcs,
+            mass_mechanics,
+            rust_model,
+            quadrature_rule,
+            additional_output,
+        )
+
+        nonlocal_solver = CDMNonlocal(
+            Q_local,
+            Q_nonlocal,
+            t0,
+            nonlocal_space,
+            mass_nonlocal,
+            nonlocal_parameters,
+            quadrature_rule,
+            mechanics_solver.q_fields,
+            mechanics_solver.model.input[Q_nonlocal_rate],
+            Q_local_damage=Q_local_damage,
+        )
+
+        # add all fields from the solver to this class for easier postprocessing
+        fields = mechanics_solver.fields.copy()
+        for key, field in nonlocal_solver.fields.items():
+            fields[key] = field
+
+        super().__init__(
+            nonlocal_solver=nonlocal_solver,
+            mechanics_solver=mechanics_solver,
+            fields=fields,
+            q_fields=mechanics_solver.q_fields,
+        )
+
+    def step(self, h: float) -> None:
+        self.mechanics_solver.step(h, self.nonlocal_solver.step)
+
+
 class CDMNonlocal(NonlocalInterface):
     M: df.fem.Function
     fields: dict[str, df.fem.Function]
@@ -317,32 +325,39 @@ class CDMNonlocal(NonlocalInterface):
 
     def __init__(
         self,
-        Q_local: list[str] | str,
-        Q_nonlocal: str,
+        Q_local: str,
+        Q_nonlocal_rate: str,
         t0: float,
         function_space: df.fem.FunctionSpace,
         M: df.fem.Function,
         parameters: dict[str, float],
         quadrature_rule: QuadratureRule,
         q_fields_local: dict[str, df.fem.Function],
-        q_field_nonlocal: df.fem.Function,
+        q_field_nonlocal_rate: df.fem.Function,
+        Q_local_damage: str | None = None,
     ):
-        if isinstance(Q_local, str):
-            Q_local = [Q_local]
-        q_fields = {Q: q_fields_local[Q] for Q in Q_local}
-        q_fields[Q_nonlocal] = q_field_nonlocal
+        q_fields = {Q_local: q_fields_local[Q_local]}
+
+        if Q_nonlocal_rate[-4:] != "rate":
+            raise ValueError("Q_nonlocal_rate must be some rate for CDM, you provided " + Q_nonlocal_rate)
+
+        q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
+
+        Q_nonlocal = Q_nonlocal_rate[:-5]
 
         fields = {
+            Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
             Q_nonlocal: df.fem.Function(function_space, name=Q_nonlocal),
-            "integral_" + Q_nonlocal: df.fem.Function(function_space, name="integral_" + Q_nonlocal),
-            "f": df.fem.Function(function_space, name="f"),
+            "nonlocal_force": df.fem.Function(function_space, name="nonlocal_force"),
         }
 
         test_function = ufl.TestFunction(function_space)
 
-        if "damage" in Q_local:
+        if Q_local_damage is not None:
+            q_fields[Q_local_damage] = q_fields_local[Q_local_damage]
+
             eta, R = parameters["eta"], parameters["R"]
-            g = ((1.0 - R) * ufl.exp(-eta * q_fields["damage"]) + R - math.exp(-eta)) / (1.0 - math.exp(-eta))
+            g = ((1.0 - R) * ufl.exp(-eta * q_fields[Q_local_damage]) + R - math.exp(-eta)) / (1.0 - math.exp(-eta))
         else:
             g = 1.0
 
@@ -351,16 +366,18 @@ class CDMNonlocal(NonlocalInterface):
             + fields[Q_nonlocal] * test_function
         ) * quadrature_rule.dx
 
-        f_ext_ufl = fields[Q_nonlocal] * test_function * quadrature_rule.dx
+        f_ext_ufl = q_fields[Q_local] * test_function * quadrature_rule.dx
 
         f_ufl = -f_int_ufl + f_ext_ufl
 
         f_form = df.fem.form(f_ufl)
 
-        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal], function_space.mesh, quadrature_rule)
+        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal_rate], function_space.mesh, quadrature_rule)
         super().__init__(
             Q_local=Q_local,
             Q_nonlocal=Q_nonlocal,
+            Q_local_damage=Q_local_damage,
+            Q_nonlocal_rate=Q_nonlocal_rate,
             t=t0,
             M=M,
             parameters=parameters,
@@ -370,79 +387,27 @@ class CDMNonlocal(NonlocalInterface):
             rate_evaluator=rate_evaluator,
         )
 
-    #     # @profile
     def step(self, h: float) -> None:
-        with self.fields["f"].vector.localForm() as f_local:
+        with self.fields["nonlocal_force"].vector.localForm() as f_local:
             f_local.set(0.0)
 
-        df.fem.petsc.assemble_vector(self.fields["f"].vector, self.form)
+        df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
+        self.fields["nonlocal_force"].x.scatter_reverse(InsertMode.add)
 
         c = self.parameters["gamma"] / self.parameters["zeta"]
         c1 = (2.0 - c * h) / (2.0 + c * h)
         c2 = 2.0 * h / (2.0 + c * h)
 
-        self.fields[self.Q_nonlocal].vector.array[:] = (
-            c1 * self.fields[self.Q_nonlocal].vector.array + c2 * self.M.vector.array * self.fields["f"].vector.array
+        self.fields[self.Q_nonlocal_rate].vector.array[:] = (
+            c1 * self.fields[self.Q_nonlocal].vector.array
+            + c2 * self.M.vector.array * self.fields["nonlocal_force"].vector.array
         )
+        self.fields[self.Q_nonlocal_rate].x.scatter_forward()
 
-        self.fields["integral_" + self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal].vector.array
+        self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal].vector.array
+        self.fields[self.Q_nonlocal].x.scatter_forward()
 
         self.rate_evaluator(self.q_fields[self.Q_nonlocal])
+        self.q_fields[self.Q_nonlocal].x.scatter_forward()
 
         self.t += h
-
-
-# class ImplicitNonlocalVariable(NonlocalInterface):
-#     """This class should work with all constraints"""
-
-#     def __init__(
-#         self,
-#         Q_local,
-#         Q_nonlocal,
-#         t0,
-#         function_space,
-#         l,
-#         quadrature_rule,
-#     ):
-#         super().__init__(Q_local, Q_nonlocal)
-#         self.t = t0
-#         self.mesh = function_space.mesh
-#         self.l = l
-#         self.quadrature_rule = quadrature_rule
-
-#         self.QS = self.quadrature_rule.create_quadrature_space(self.mesh)
-
-#         self.p_l = df.fem.Function(self.QS)
-#         self.p_nl_q = self.p_l.vector.array.copy()
-
-#         self.p_nl = df.fem.Function(function_space)
-
-#         test_function = ufl.TestFunction(function_space)
-#         trial_function = ufl.TrialFunction(function_space)
-#         b_form = ufl.inner(test_function, self.p_l) * self.quadrature_rule.dx
-#         A_form = (
-#             ufl.inner(test_function, trial_function)
-#             + self.l**2.0
-#             * ufl.inner(ufl.grad(test_function), ufl.grad(trial_function))
-#         ) * self.quadrature_rule.dx
-
-#         self.problem = df.fem.petsc.LinearProblem(A_form, b_form, u=self.p_nl)
-#         # p_nl_h = problem.solve()
-
-#         self.p_evaluator = QuadratureEvaluator(
-#             self.p_nl, self.mesh, self.quadrature_rule
-#         )
-
-#     def step(self, h, p, substeps=1):
-#         # we assume that the local plastic strain is constant on all substeps
-#         set_local(self.p_l, p)
-#         self.problem.solve()
-
-#         self.p_evaluator(self.p_nl_q)
-#         self.t += h
-
-#     def get_quadrature_values(self):
-#         return self.p_nl_q
-
-#     def get_nodal_values(self):
-#         return self.p_nl
