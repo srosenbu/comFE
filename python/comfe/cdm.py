@@ -289,7 +289,7 @@ class CDMNonlocalMechanics(CDMSolver):
 
         nonlocal_solver = CDMNonlocal(
             Q_local,
-            Q_nonlocal,
+            Q_nonlocal_rate,
             t0,
             nonlocal_space,
             mass_nonlocal,
