@@ -242,6 +242,8 @@ class CDMNonlocalMechanics(CDMSolver):
     mechanics_solver: CDM3D
     fields: dict[str, df.fem.Function]
     q_fields: dict[str, df.fem.Function]
+    function_space: df.fem.FunctionSpace
+    t: float
 
     class Config:
         arbitrary_types_allowed = True
@@ -310,10 +312,13 @@ class CDMNonlocalMechanics(CDMSolver):
             mechanics_solver=mechanics_solver,
             fields=fields,
             q_fields=mechanics_solver.q_fields,
+            function_space=velocity_space,
+            t=t0,
         )
 
     def step(self, h: float) -> None:
         self.mechanics_solver.step(h, self.nonlocal_solver.step)
+        self.t = self.mechanics_solver.t
 
 
 class CDMNonlocal(NonlocalInterface):
@@ -404,15 +409,15 @@ class CDMNonlocal(NonlocalInterface):
         c2 = 2.0 * h / (2.0 + c * h)
 
         self.fields[self.Q_nonlocal_rate].vector.array[:] = (
-            c1 * self.fields[self.Q_nonlocal].vector.array
+            c1 * self.fields[self.Q_nonlocal_rate].vector.array
             + c2 * self.M.vector.array * self.fields["nonlocal_force"].vector.array
         )
         self.fields[self.Q_nonlocal_rate].x.scatter_forward()
 
-        self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal].vector.array
+        self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal_rate].vector.array
         self.fields[self.Q_nonlocal].x.scatter_forward()
 
-        self.rate_evaluator(self.q_fields[self.Q_nonlocal])
-        self.q_fields[self.Q_nonlocal].x.scatter_forward()
+        self.rate_evaluator(self.q_fields[self.Q_nonlocal_rate])
+        self.q_fields[self.Q_nonlocal_rate].x.scatter_forward()
 
         self.t += h

@@ -93,6 +93,8 @@ impl ConstitutiveModel for GradientJH23D {
         } else {
             alpha = 1.0;
         }
+        
+        output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
 
         // /***********************************************************************
         //  * UPDATE DENSITY
@@ -199,9 +201,6 @@ impl ConstitutiveModel for GradientJH23D {
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
 
-        if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {
-            output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
-        }
     }
 
     /// Returns the physical quantities that are required as input for the
@@ -221,6 +220,7 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
+            (Q::EqPlasticStrain, QDim::Scalar),
         ])
     }
 
@@ -250,7 +250,6 @@ impl ConstitutiveModel for GradientJH23D {
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::EqPlasticStrain, QDim::Scalar),
             (Q::InternalPlasticEnergy, QDim::Scalar),
             (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),
