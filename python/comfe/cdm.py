@@ -241,7 +241,7 @@ class CDMNonlocalMechanics(CDMSolver):
     nonlocal_solver: NonlocalInterface
     mechanics_solver: CDM3D
     fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function]
+    q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
     function_space: df.fem.FunctionSpace
     t: float
 
@@ -307,11 +307,16 @@ class CDMNonlocalMechanics(CDMSolver):
         for key, field in nonlocal_solver.fields.items():
             fields[key] = field
 
+        q_fields = mechanics_solver.q_fields.copy()
+        for key, field in nonlocal_solver.q_fields.items():
+            if key not in q_fields:
+                q_fields[key] = field
+
         super().__init__(
             nonlocal_solver=nonlocal_solver,
             mechanics_solver=mechanics_solver,
             fields=fields,
-            q_fields=mechanics_solver.q_fields,
+            q_fields=q_fields,
             function_space=velocity_space,
             t=t0,
         )
@@ -324,7 +329,7 @@ class CDMNonlocalMechanics(CDMSolver):
 class CDMNonlocal(NonlocalInterface):
     M: df.fem.Function
     fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function]
+    q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
     rate_evaluator: QuadratureEvaluator
     parameters: dict[str, float]
     form: df.fem.FormMetaClass
@@ -368,6 +373,7 @@ class CDMNonlocal(NonlocalInterface):
 
             eta, R = parameters["eta"], parameters["R"]
             g = ((1.0 - R) * ufl.exp(-eta * q_fields[Q_local_damage]) + R - math.exp(-eta)) / (1.0 - math.exp(-eta))
+            q_fields["interaction"] = g
         else:
             g = 1.0
 
