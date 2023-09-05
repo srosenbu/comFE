@@ -237,6 +237,32 @@ class CDMPlaneStrain(CDM3D):
         )
 
 
+class CDM1D(CDM3D):
+    # TODO, not sure if we should use uniaxial strain or stress. Strain is easier to implement
+    def _as_3d_tensor(self, T):
+        return ufl.as_matrix([[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]])
+
+    def _as_mandel(self, T):
+        """
+        T:
+            Symmetric 2x2 tensor
+        Returns:
+            Vector representation of T with factor sqrt(2) for off diagonal components
+        """
+        T3d = self._as_3d_tensor(T)
+        factor = 2**0.5
+        return ufl.as_vector(
+            [
+                T3d[0, 0],
+                T3d[1, 1],
+                0.0,
+                0.0,
+                0.0,
+                factor * T3d[0, 1],
+            ]
+        )
+
+
 class CDMNonlocalMechanics(CDMSolver):
     nonlocal_solver: NonlocalInterface
     mechanics_solver: CDM3D

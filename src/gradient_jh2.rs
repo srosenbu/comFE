@@ -36,6 +36,7 @@ impl ConstitutiveModel for GradientJH23D {
                 K3: *parameters.get("K3").unwrap(),
                 BETA: *parameters.get("BETA").unwrap(),
                 EFMIN: *parameters.get("EFMIN").unwrap(),
+                DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
             },
         }
     }
@@ -69,7 +70,7 @@ impl ConstitutiveModel for GradientJH23D {
             .max(self.parameters.EFMIN);
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
-        let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(1.0);
+        let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         output.set_scalar(Q::Damage, ip, damage_1);
 
         let fracture_surface =

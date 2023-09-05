@@ -27,6 +27,7 @@ pub struct JH2Parameters {
     pub K3: f64,
     pub BETA: f64,
     pub EFMIN: f64,
+    pub DMAX: f64,
 }
 #[derive(Debug)]
 pub struct JH23D {
@@ -55,6 +56,7 @@ impl ConstitutiveModel for JH23D {
                 K3: *parameters.get("K3").unwrap(),
                 BETA: *parameters.get("BETA").unwrap(),
                 EFMIN: *parameters.get("EFMIN").unwrap(),
+                DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
             },
         }
     }
@@ -107,7 +109,7 @@ impl ConstitutiveModel for JH23D {
             del_lambda = (s_tr_eq - yield_surface) / (3. * self.parameters.SHEAR_MODULUS);
             alpha = yield_surface / s_tr_eq;
 
-            damage_1 = (damage_0 + del_lambda / e_p_f).min(1.0);
+            damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
             output.set_scalar(Q::Damage, ip, damage_1);
         } else {
             alpha = 1.0;
