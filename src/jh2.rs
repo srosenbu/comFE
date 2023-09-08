@@ -216,8 +216,6 @@ impl ConstitutiveModel for JH23D {
             let e_1 = e_0 + del_t * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
-        
-        
         if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {
             output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
         }

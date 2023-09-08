@@ -31,6 +31,9 @@ class ExplicitMechanicsSolver(BaseModel, ABC):
 
 
 class CDMSolver(BaseModel, ABC):
+    fields: dict[str, df.fem.Function]
+    q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
+
     @abstractmethod
     def step(self, h: float) -> None:
         pass
@@ -54,8 +57,10 @@ class CDM3D(CDMSolver):
     bcs: list[df.fem.DirichletBCMetaClass]
     M: df.fem.Function
     model: ConstitutiveModel
-    fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function]
+    # fields: dict[str, df.fem.Function]
+    # q_fields: dict[str, df.fem.Function]
+    total_energy: float | None = None
+    # energy_form: df.fem.FormMetaClass | None = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -70,6 +75,7 @@ class CDM3D(CDMSolver):
         rust_model: RustConstitutiveModel,
         quadrature_rule: QuadratureRule,
         additional_output: list[str] | None = None,
+        calculate_total_energy: bool = False,
     ) -> None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
@@ -103,7 +109,6 @@ class CDM3D(CDMSolver):
             function_space.mesh,
             quadrature_rule,
         )
-
         super().__init__(
             function_space=function_space,
             t=t0,
@@ -117,6 +122,7 @@ class CDM3D(CDMSolver):
             # nonlocal_var=nonlocal_var,
             fields={"u": u, "v": v, "f": f},
             q_fields=model.output,
+            total_energy=0.0 if calculate_total_energy else None,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
@@ -172,7 +178,8 @@ class CDM3D(CDMSolver):
         self.fields["f"].x.scatter_reverse(ScatterMode.add)
 
         if self.external_forces is not None:
-            self.fields["f"].vector.array[:] += self.external_forces(self.t).vector.array
+            external_forces = self.external_forces(self.t)
+            self.fields["f"].vector.array[:] += external_forces.vector.array
             # TODO
             # self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD)
             self.fields["f"].x.scatter_forward()
@@ -209,6 +216,20 @@ class CDM3D(CDMSolver):
 
         set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
 
+        if self.total_energy is not None:
+            external_forces_0 = external_forces.vector.array.copy()
+
+            # undo mesh update
+            set_mesh_coordinates(self.function_space.mesh, -du_half, mode="add")
+            external_forces = self.external_forces(self.t + self.del_t)
+
+            external_forces.vector.array[:] = 0.5 * (external_forces_0 + external_forces.vector.array)
+            energy_form = df.fem.form(ufl.inner(external_forces, self.fields["v"]) * ufl.ds)
+            energy_increment = df.fem.assemble_scalar(energy_form)
+            self.total_energy += self.del_t * energy_increment
+            # redo mesh update
+            set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
+        #
         self.t += self.del_t
 
 
@@ -238,8 +259,9 @@ class CDMPlaneStrain(CDM3D):
 
 
 class CDM1D(CDM3D):
-    # TODO, not sure if we should use uniaxial strain or stress. Strain is easier to implement
+    # TODO, not sure if we should use uniaxial strain or stress. Strain is easier to implement.
     def _as_3d_tensor(self, T):
+        raise NotImplementedError
         return ufl.as_matrix([[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]])
 
     def _as_mandel(self, T):
@@ -249,6 +271,7 @@ class CDM1D(CDM3D):
         Returns:
             Vector representation of T with factor sqrt(2) for off diagonal components
         """
+        raise NotImplementedError
         T3d = self._as_3d_tensor(T)
         factor = 2**0.5
         return ufl.as_vector(
@@ -266,8 +289,8 @@ class CDM1D(CDM3D):
 class CDMNonlocalMechanics(CDMSolver):
     nonlocal_solver: NonlocalInterface
     mechanics_solver: CDM3D
-    fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
+    # fields: dict[str, df.fem.Function]
+    # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
     function_space: df.fem.FunctionSpace
     t: float
 
@@ -354,8 +377,8 @@ class CDMNonlocalMechanics(CDMSolver):
 
 class CDMNonlocal(NonlocalInterface):
     M: df.fem.Function
-    fields: dict[str, df.fem.Function]
-    q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
+    # fields: dict[str, df.fem.Function]
+    # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
     rate_evaluator: QuadratureEvaluator
     parameters: dict[str, float]
     form: df.fem.FormMetaClass
