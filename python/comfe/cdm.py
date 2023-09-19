@@ -10,7 +10,7 @@ from petsc4py import PETSc
 from pydantic import BaseModel
 
 from .comfe import jaumann_rotation  # , jaumann_rotation_expensive
-from .helpers import QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
+from .helpers import LogMixin, QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
 from .laws import ConstitutiveModel, RustConstitutiveModel
 
 __all__ = [
@@ -30,9 +30,12 @@ class ExplicitMechanicsSolver(BaseModel, ABC):
         pass
 
 
-class CDMSolver(BaseModel, ABC):
+class CDMSolver(BaseModel, ABC, LogMixin):
     fields: dict[str, df.fem.Function]
     q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
+
+    class Config:
+        arbitrary_types_allowed = True
 
     @abstractmethod
     def step(self, h: float) -> None:
@@ -109,6 +112,13 @@ class CDM3D(CDMSolver):
             function_space.mesh,
             quadrature_rule,
         )
+
+        if calculate_total_energy:
+            self.logger.warning("Total energy calculation is expensive and should onl be used for debugging purposes.")
+            total_energy = 0.0
+        else:
+            total_energy = None
+
         super().__init__(
             function_space=function_space,
             t=t0,
@@ -122,7 +132,7 @@ class CDM3D(CDMSolver):
             # nonlocal_var=nonlocal_var,
             fields={"u": u, "v": v, "f": f},
             q_fields=model.output,
-            total_energy=0.0 if calculate_total_energy else None,
+            total_energy=total_energy,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
@@ -163,8 +173,6 @@ class CDM3D(CDMSolver):
         # TODO: Is GhostUpdate really used correcxtly
         self.model.evaluate(h)
         self.model.update()
-        # TODO
-        # self.stress.x.scatter_forward()
 
     def step(self, h, intermediate_step: Callable | None = None) -> None:
         del_t_mid = (h + self.del_t) / 2.0 if self.del_t != 0.0 else h
@@ -173,15 +181,11 @@ class CDM3D(CDMSolver):
         with self.fields["f"].vector.localForm() as f_local:
             f_local.set(0.0)
         df.fem.petsc.assemble_vector(self.fields["f"].vector, self.f_int_form)
-        # TODO
-        # self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.ADD_VALUES, mode=PETSc.ScatterMode.REVERSE)
         self.fields["f"].x.scatter_reverse(ScatterMode.add)
 
         if self.external_forces is not None:
             external_forces = self.external_forces(self.t)
             self.fields["f"].vector.array[:] += external_forces.vector.array
-            # TODO
-            # self.fields["f"].vector.ghostUpdate(addv=PETSc.InsertMode.INSERT_VALUES, mode=PETSc.ScatterMode.FORWARD)
             self.fields["f"].x.scatter_forward()
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
@@ -224,8 +228,10 @@ class CDM3D(CDMSolver):
             external_forces = self.external_forces(self.t + self.del_t)
 
             external_forces.vector.array[:] = 0.5 * (external_forces_0 + external_forces.vector.array)
-            energy_form = df.fem.form(ufl.inner(external_forces, self.fields["v"]) * ufl.ds)
-            energy_increment = df.fem.assemble_scalar(energy_form)
+
+            # energy_form = df.fem.form(ufl.inner(external_forces, self.fields["v"]) * ufl.ds)
+            # energy_increment = df.fem.assemble_scalar(energy_form)
+            energy_increment = np.inner(external_forces.vector.array, self.fields["v"].vector.array)
             self.total_energy += self.del_t * energy_increment
             # redo mesh update
             set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
@@ -258,11 +264,9 @@ class CDMPlaneStrain(CDM3D):
         )
 
 
-class CDM1D(CDM3D):
-    # TODO, not sure if we should use uniaxial strain or stress. Strain is easier to implement.
+class CDMUniaxialStrain(CDM3D):
     def _as_3d_tensor(self, T):
-        raise NotImplementedError
-        return ufl.as_matrix([[T[0, 0], T[0, 1], 0.0], [T[1, 0], T[1, 1], 0.0], [0.0, 0.0, 0.0]])
+        return ufl.as_matrix([[T[0, 0], 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
 
     def _as_mandel(self, T):
         """
@@ -271,17 +275,15 @@ class CDM1D(CDM3D):
         Returns:
             Vector representation of T with factor sqrt(2) for off diagonal components
         """
-        raise NotImplementedError
         T3d = self._as_3d_tensor(T)
-        factor = 2**0.5
         return ufl.as_vector(
             [
                 T3d[0, 0],
-                T3d[1, 1],
                 0.0,
                 0.0,
                 0.0,
-                factor * T3d[0, 1],
+                0.0,
+                0.0,
             ]
         )
 

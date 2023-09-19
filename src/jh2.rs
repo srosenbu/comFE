@@ -196,24 +196,27 @@ impl ConstitutiveModel for JH23D {
 
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1); 
+            let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev * (1.-alpha);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
+            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1); 
+            let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev * alpha;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
-            let e_1 = e_0 + del_t * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
+            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
-            let e_1 = e_0 + del_t * sigma_mid.dot(&d_eps);
+            let density_mid = 0.5 * (density_0 + density_1);
+            let e_1 = e_0 + del_t/density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
         if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {

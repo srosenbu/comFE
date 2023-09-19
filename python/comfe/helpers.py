@@ -1,3 +1,5 @@
+import logging
+
 import basix
 import dolfinx as df
 import numpy as np
@@ -13,6 +15,15 @@ __all__ = [
     "critical_timestep",
     "critical_timestep_nonlocal",
 ]
+
+
+class LogMixin(object):
+    @property
+    def logger(self):
+        name = self.__class__.__module__
+        return logging.getLogger(name)
+
+
 # class Spaces:
 #     _self = None
 #     _spaces = None
