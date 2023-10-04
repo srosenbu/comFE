@@ -17,6 +17,7 @@ __all__ = [
     "ExplicitMechanicsSolver",
     "CDM3D",
     "CDMPlaneStrain",
+    "CDMUniaxialStrain",
     "CDMNonlocalMechanics",
     "CDMSolver",
     "NonlocalInterface",

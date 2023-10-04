@@ -127,8 +127,6 @@ impl ConstitutiveModel for GradientJH23D {
                     d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
                     p_damaged
                 }
-                //d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
-                //(self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
             }
         };
         if damage_1 > damage_0 {
@@ -181,7 +179,7 @@ impl ConstitutiveModel for GradientJH23D {
         
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1); 
             let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev * (1.-alpha);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
@@ -190,7 +188,7 @@ impl ConstitutiveModel for GradientJH23D {
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1); 
             let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev * alpha;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
