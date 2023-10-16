@@ -229,7 +229,7 @@ def diagonal_mass(function_space, rho, invert=True) -> df.fem.Function:
 
 
 def critical_timestep_1d(l_e, E, rho, order=1):
-    h_mesh = df.mesh.create_interval(MPI.COMM_SELF, np.array([0.0, l_e]), [1], cell_type=df.mesh.CellType.interval)
+    h_mesh = df.mesh.create_interval(MPI.COMM_SELF, 1, np.array([0.0, l_e]))
     h_P1 = df.fem.FunctionSpace(h_mesh, ("CG", order))
     h_u, h_v = ufl.TrialFunction(h_P1), ufl.TestFunction(h_P1)
     K_form = df.fem.form(E * ufl.inner(ufl.grad(h_u), ufl.grad(h_v)) * ufl.dx)

@@ -143,10 +143,16 @@ impl ConstitutiveModel for JH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
-                    let denominator = (density_1-density_0)/self.parameters.RHO;
-                    let K_pl = (p_damaged - p_0) / denominator;
-                    let K_el = (p_trial - p_0) / denominator;
-                    d_eps_vol_pl = (1. - K_pl / K_el) * d_eps_vol;
+                    //let denominator = (density_1-density_0)/self.parameters.RHO;
+                    let pl = p_damaged - p_0;
+                    let el = p_trial - p_0;
+                    d_eps_vol_pl = {
+                        if el != 0.0 {
+                            (1. - pl / el) * d_eps_vol
+                        } else {
+                            d_eps_vol
+                        }
+                    };
                     p_damaged
                 }
             }
