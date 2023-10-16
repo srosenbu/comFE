@@ -124,7 +124,10 @@ impl ConstitutiveModel for GradientJH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
-                    d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
+                    let denominator = (density_1-density_0)/self.parameters.RHO;
+                    let K_pl = (p_damaged - p_0) / denominator;
+                    let K_el = (p_trial - p_0) / denominator;
+                    d_eps_vol_pl = (1. - K_pl / K_el) * d_eps_vol;
                     p_damaged
                 }
             }

@@ -124,6 +124,7 @@ impl ConstitutiveModel for JH23D {
         let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
         let density_1 = density_0 * (1. - f1) / (1. + f1);
+        assert!(density_1 > 0.0, "Negative density encountered in JH2 model: {}", density_1);
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.RHO - 1.;
@@ -142,10 +143,12 @@ impl ConstitutiveModel for JH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
-                    d_eps_vol_pl = d_eps_vol - (p_damaged - p_0) / (self.parameters.K1 * del_t);
+                    let denominator = (density_1-density_0)/self.parameters.RHO;
+                    let K_pl = (p_damaged - p_0) / denominator;
+                    let K_el = (p_trial - p_0) / denominator;
+                    d_eps_vol_pl = (1. - K_pl / K_el) * d_eps_vol;
                     p_damaged
                 }
-                //(self.parameters.K1 * mu).max(-self.parameters.T * (1. - damage_1))
             }
         };
         if damage_1 > damage_0 {

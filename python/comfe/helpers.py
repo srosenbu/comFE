@@ -224,6 +224,31 @@ def diagonal_mass(function_space, rho, invert=True) -> df.fem.Function:
     return M_action
 
 
+# class CriticalTimestep(mesh, rho, K, G, order=1):
+#    pass
+
+
+def critical_timestep_1d(l_e, E, rho, order=1):
+    h_mesh = df.mesh.create_interval(MPI.COMM_SELF, np.array([0.0, l_e]), [1], cell_type=df.mesh.CellType.interval)
+    h_P1 = df.fem.FunctionSpace(h_mesh, ("CG", order))
+    h_u, h_v = ufl.TrialFunction(h_P1), ufl.TestFunction(h_P1)
+    K_form = df.fem.form(E * ufl.inner(ufl.grad(h_u), ufl.grad(h_v)) * ufl.dx)
+    M_form = df.fem.form(rho * ufl.inner(h_u, h_v) * ufl.dx)
+
+    h_K, h_M = (
+        df.fem.petsc.assemble_matrix(K_form),
+        df.fem.petsc.assemble_matrix(M_form),
+    )
+    h_K.assemble()
+    h_M.assemble()
+    h_M = np.array(h_M[:, :])
+    h_K = np.array(h_K[:, :])
+    max_eig = np.linalg.norm(eigvals(h_K, h_M), np.inf)
+
+    h = 2.0 / max_eig**0.5
+    return h
+
+
 def critical_timestep(l_x, l_y, G, K, rho, cell_type=df.mesh.CellType.quadrilateral, order=1):
     # todo: implement other cell_types
     # cell_type=mesh.topology.cell_type

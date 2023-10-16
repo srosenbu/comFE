@@ -64,6 +64,7 @@ class CDM3D(CDMSolver):
     # fields: dict[str, df.fem.Function]
     # q_fields: dict[str, df.fem.Function]
     total_energy: float | None = None
+    distortion_expr: df.fem.Expression | None = None
     # energy_form: df.fem.FormMetaClass | None = None
 
     class Config:
@@ -80,11 +81,22 @@ class CDM3D(CDMSolver):
         quadrature_rule: QuadratureRule,
         additional_output: list[str] | None = None,
         calculate_total_energy: bool = False,
+        monitor_distortion: bool = False,
     ) -> None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
         u = df.fem.Function(function_space, name="Displacements")
         f = df.fem.Function(function_space, name="Forces")
+        fields = {"u": u, "v": v, "f": f}
+        if monitor_distortion:
+            detJ_space = df.fem.FunctionSpace(function_space.mesh, ("DG", 0))
+            detJ = df.fem.Function(detJ_space, name="detJ")
+            distortion_expr = df.fem.Expression(
+                ufl.JacobianDeterminant(detJ_space.mesh), detJ_space.element.interpolation_points()
+            )
+            fields["detJ"] = detJ
+        else:
+            distortion_expr = None
 
         model = ConstitutiveModel(
             rust_model,
@@ -131,9 +143,10 @@ class CDM3D(CDMSolver):
             model=model,
             M=M,
             # nonlocal_var=nonlocal_var,
-            fields={"u": u, "v": v, "f": f},
+            fields=fields,
             q_fields=model.output,
             total_energy=total_energy,
+            distortion_expr=distortion_expr,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
