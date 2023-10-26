@@ -3,12 +3,11 @@ use crate::stress_strain::{
     deviatoric, mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
 };
 
-use nalgebra::SMatrix;
+use nalgebra::{SMatrix, DVectorView};
 use std::cmp;
 use std::collections::HashMap;
-
 #[derive(Debug)]
-pub struct JH2Parameters {
+pub struct JH2ConstParameters {
     pub RHO: f64,
     pub SHEAR_MODULUS: f64,
     pub A: f64,
@@ -31,13 +30,13 @@ pub struct JH2Parameters {
 }
 #[derive(Debug)]
 pub struct JH23D {
-    parameters: JH2Parameters,
+    parameters: JH2ConstParameters,
 }
 
 impl ConstitutiveModel for JH23D {
     fn new(parameters: &HashMap<String, f64>) -> Self {
         Self {
-            parameters: JH2Parameters {
+            parameters: JH2ConstParameters {
                 RHO: *parameters.get("RHO").unwrap(),
                 SHEAR_MODULUS: *parameters.get("SHEAR_MODULUS").unwrap(),
                 A: *parameters.get("A").unwrap(),
@@ -285,6 +284,7 @@ impl ConstitutiveModel for JH23D {
             (Q::InternalPlasticEnergy, QDim::Scalar),
             (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),
+            (Q::BulkViscosity, QDim::Scalar),
         ])
     }
 
