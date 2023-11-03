@@ -24,6 +24,27 @@ __all__ = [
     "CDMNonlocal",
 ]
 
+# class BulkViscosity(BaseModel):
+#     c_l: float = 0.06
+#     c_0: float = 1.5
+#     expr: df.fem.Expression
+#     diameter: df.fem.Function
+
+#     class Config:
+#         arbitrary_types_allowed = True
+
+#     @staticmethod
+#     def from_rule(mesh: df.mesh.Mesh, rule:QuadratureRule)->None:
+#         #dim = mesh.geometry.dim
+#         cell_space = rule.create_quadrature_space(mesh)
+#         diameter = df.fem.Function(cell_space, name="diameter")
+#         expr = df.fem.Expression(ufl.CellDiameter(mesh), cell_space.element.interpolation_points())
+#         super().__init__(expr=expr, diameter=diameter)
+
+#     def evaluate(self):
+#         self.diameter.interpolate(self.expr)
+#         self.diameter.x.scatter_forward()
+
 
 class ExplicitMechanicsSolver(BaseModel, ABC):
     @abstractmethod
@@ -65,6 +86,7 @@ class CDM3D(CDMSolver):
     # q_fields: dict[str, df.fem.Function]
     total_energy: float | None = None
     distortion_expr: df.fem.Expression | None = None
+    viscosity_evaluator: QuadratureEvaluator | None = None
     # energy_form: df.fem.FormMetaClass | None = None
 
     class Config:
@@ -81,6 +103,7 @@ class CDM3D(CDMSolver):
         quadrature_rule: QuadratureRule,
         additional_output: list[str] | None = None,
         calculate_total_energy: bool = False,
+        calculate_bulk_viscosity: bool = False,
         monitor_distortion: bool = False,
     ) -> None:
         # self.del_t = None
@@ -109,22 +132,45 @@ class CDM3D(CDMSolver):
         stress = model["mandel_stress"]
 
         test_function = ufl.TestFunction(function_space)
-
-        f_int_ufl = (
-            -ufl.inner(
-                self._as_mandel(ufl.sym(ufl.grad(test_function))),
-                stress,
+        try:
+            f_int_ufl = (
+                -ufl.inner(
+                    self._as_mandel(ufl.sym(ufl.grad(test_function))),
+                    stress,
+                )
+                * quadrature_rule.dx
             )
-            * quadrature_rule.dx
-        )
+        except:
+            f_int_ufl = (
+                -ufl.inner(
+                    self._as_mandel(ufl.grad(test_function)),
+                    stress,
+                )
+                * quadrature_rule.dx
+            )
 
         f_int_form = df.fem.form(f_int_ufl)
-
-        L_evaluator = QuadratureEvaluator(
-            self._as_3d_tensor(ufl.nabla_grad(v)),
-            function_space.mesh,
-            quadrature_rule,
-        )
+        try:
+            L_evaluator = QuadratureEvaluator(
+                self._as_3d_tensor(ufl.nabla_grad(v)),
+                function_space.mesh,
+                quadrature_rule,
+            )
+        except:
+            L_evaluator = QuadratureEvaluator(
+                self._as_3d_tensor(ufl.grad(v)),
+                function_space.mesh,
+                quadrature_rule,
+            )
+        if calculate_bulk_viscosity:
+            assert "cell_diameter" in model.input
+            viscosity_evaluator = QuadratureEvaluator(
+                ufl.CellDiameter(function_space.mesh),
+                function_space.mesh,
+                quadrature_rule,
+            )
+        else:
+            viscosity_evaluator = None
 
         if calculate_total_energy:
             self.logger.warning("Total energy calculation is expensive and should onl be used for debugging purposes.")
@@ -147,6 +193,7 @@ class CDM3D(CDMSolver):
             q_fields=model.output,
             total_energy=total_energy,
             distortion_expr=distortion_expr,
+            viscosity_evaluator=viscosity_evaluator,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
@@ -174,6 +221,10 @@ class CDM3D(CDMSolver):
     def stress_update(self, h):
         L = self.model.input["velocity_gradient"]
         sigma = self.model.input["mandel_stress"]
+        if self.viscosity_evaluator is not None:
+            cell_diameter = self.model.input["cell_diameter"]
+            self.viscosity_evaluator(cell_diameter)
+
         self.L_evaluator(L)
         # print(sigma.vector.array)
 
@@ -280,7 +331,7 @@ class CDMPlaneStrain(CDM3D):
 
 class CDMUniaxialStrain(CDM3D):
     def _as_3d_tensor(self, T):
-        return ufl.as_matrix([[T[0, 0], 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
+        return ufl.as_matrix([[T[0], 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]])
 
     def _as_mandel(self, T):
         """
@@ -289,6 +340,7 @@ class CDMUniaxialStrain(CDM3D):
         Returns:
             Vector representation of T with factor sqrt(2) for off diagonal components
         """
+        print(T.ufl_shape)
         T3d = self._as_3d_tensor(T)
         return ufl.as_vector(
             [
@@ -332,6 +384,7 @@ class CDMNonlocalMechanics(CDMSolver):
         additional_output: list[str] | None = None,
         mass_mechanics: df.fem.Function | None = None,
         mass_nonlocal: df.fem.Function | None = None,
+        calculate_bulk_viscosity: bool = False,
     ) -> None:
         mass_mechanics = (
             mass_mechanics
@@ -352,6 +405,7 @@ class CDMNonlocalMechanics(CDMSolver):
             rust_model,
             quadrature_rule,
             additional_output,
+            calculate_bulk_viscosity=calculate_bulk_viscosity,
         )
 
         nonlocal_solver = CDMNonlocal(

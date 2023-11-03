@@ -57,6 +57,10 @@ pub enum Q {
     InternalElasticEnergyRate,
     #[strum(serialize = "InternalPlasticEnergyRate", serialize = "internal_plastic_energy_rate")]
     InternalPlasticEnergyRate,
+    #[strum(serialize = "BulkViscosity", serialize = "bulk_viscosity")]
+    BulkViscosity,
+    #[strum(serialize = "CellDiameter", serialize = "cell_diameter")]
+    CellDiameter,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -225,6 +229,8 @@ impl Q {
             Q::InternalEnergyRate => QDim::Scalar,
             Q::InternalElasticEnergyRate => QDim::Scalar,
             Q::InternalPlasticEnergyRate => QDim::Scalar,
+            Q::BulkViscosity => QDim::Scalar,
+            Q::CellDiameter => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
         }
     }
@@ -299,4 +305,13 @@ pub trait ConstitutiveModel {
             return Err("There are inconsistencies in input and output sizes.");
         }
     }
+}
+
+
+struct QValue<'a>(&'a [f64]);
+struct QValueMut<'a>(&'a mut [f64]);
+
+trait Input {
+    fn get_array<const N:usize>(&self, i:usize) -> &[f64; N];
+    fn get_scalar(&self, i:usize) -> f64;
 }

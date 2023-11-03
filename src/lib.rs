@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::jh2::JH23D;
+use crate::generic_jh2::GenericJH23D;
 use crate::gradient_jh2::GradientJH23D;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
 //use crate::stress_strain;
@@ -14,6 +15,7 @@ use pyo3::types::PyDict;
 use std::str::FromStr;
 pub mod interfaces;
 pub mod jh2;
+pub mod generic_jh2;
 pub mod gradient_jh2;
 pub mod smallstrain;
 pub mod stress_strain;

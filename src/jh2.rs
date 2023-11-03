@@ -77,6 +77,8 @@ impl ConstitutiveModel for JH23D {
         let mut damage_1 = damage_0;
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
+        let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
+
         let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
         let d_eps_eq = ((2. / 3.) * d_eps.norm_squared()).sqrt();
@@ -172,11 +174,23 @@ impl ConstitutiveModel for JH23D {
             output.set_scalar(Q::BulkingPressure, ip, del_p);
         }
 
+        // Calculate bulk viscosity
+        let l = input.get_scalar(Q::CellDiameter, ip);
+        let tr_deps = d_eps_vol * 3.;
+        let c = (self.parameters.K1 / self.parameters.RHO).sqrt();
+        let q_1 = {
+            if tr_deps < 0.0 {
+                l * density_1 * (1.5 * l * tr_deps.powi(2) +  c * 0.06 * tr_deps.abs())
+            } else {
+                0.0
+            }
+        };
+        output.set_scalar(Q::BulkViscosity, ip, q_1);
         // /***********************************************************************
         //  * Combine deviatoric and volumetric stresses
         //  **********************************************************************/
         let s_1 = s_tr * alpha;
-        let sigma_1 = s_1 - MANDEL_IDENTITY * p_1;
+        let sigma_1 = s_1 - MANDEL_IDENTITY * (p_1+q_1);
         output.set_vector(Q::MandelStress, ip, sigma_1);
 
         // ***********************************************************************
@@ -239,6 +253,7 @@ impl ConstitutiveModel for JH23D {
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
+            (Q::CellDiameter, QDim::Scalar),
         ])
     }
 
@@ -251,6 +266,7 @@ impl ConstitutiveModel for JH23D {
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
+            (Q::BulkViscosity, QDim::Scalar),
         ])
     }
 
