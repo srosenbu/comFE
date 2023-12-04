@@ -15,8 +15,8 @@ pub struct GradientJH23D {
 }
 
 impl ConstitutiveModel for GradientJH23D {
-    fn new(parameters: &HashMap<String, f64>) -> Self {
-        Self {
+    fn new(parameters: &HashMap<String, f64>) -> Option<Self>{
+        Some(Self {
             parameters: JH2ConstParameters {
                 RHO: *parameters.get("RHO").unwrap(),
                 SHEAR_MODULUS: *parameters.get("SHEAR_MODULUS").unwrap(),
@@ -38,7 +38,7 @@ impl ConstitutiveModel for GradientJH23D {
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
             },
-        }
+        })
     }
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let velocity_gradient = input
@@ -200,23 +200,33 @@ impl ConstitutiveModel for GradientJH23D {
         
         // Update optional internal variables if needed
         
+        let elastic_rate =
+            - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
+        
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = - 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1) * 0.0; //TODO 
             let density_mid = 0.5 * (density_0 + density_1);
-            let deviatoric_rate = d_eps_dev * (1.-alpha);
+            let deviatoric_rate = d_eps_dev - elastic_rate;
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
             let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = - 0.5 * (p_0 + p_1); 
+            let p_mid = - 0.5 * (p_0 + p_1) * 0.0; //TODO 
             let density_mid = 0.5 * (density_0 + density_1);
-            let deviatoric_rate = d_eps_dev * alpha;
+            let deviatoric_rate = elastic_rate;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
             let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
+        }
+        if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
+            let q_mid = - 0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
+            let density_mid = 0.5 * (density_0 + density_1);
+            let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
+            let e_1 = e_0 + del_t/density_mid * 3.* d_eps_vol * q_mid;
+            output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
@@ -280,6 +290,7 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::InternalPlasticEnergy, QDim::Scalar),
             (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),
+            (Q::InternalHeatingEnergy, QDim::Scalar),
         ])
     }
 }

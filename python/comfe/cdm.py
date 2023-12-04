@@ -173,7 +173,9 @@ class CDM3D(CDMSolver):
             viscosity_evaluator = None
 
         if calculate_total_energy:
-            self.logger.warning("Total energy calculation is expensive and should onl be used for debugging purposes.")
+            self.logger.warning(
+                "Total energy calculation is expensive and should only be used for debugging purposes."
+            )
             total_energy = 0.0
         else:
             total_energy = None
@@ -289,7 +291,7 @@ class CDM3D(CDMSolver):
             external_forces_0 = external_forces.vector.array.copy()
 
             # undo mesh update
-            set_mesh_coordinates(self.function_space.mesh, -du_half, mode="add")
+            # set_mesh_coordinates(self.function_space.mesh, -du_half, mode="add")
             external_forces = self.external_forces(self.t + self.del_t)
 
             external_forces.vector.array[:] = 0.5 * (external_forces_0 + external_forces.vector.array)
@@ -299,7 +301,7 @@ class CDM3D(CDMSolver):
             energy_increment = np.inner(external_forces.vector.array, self.fields["v"].vector.array)
             self.total_energy += self.del_t * energy_increment
             # redo mesh update
-            set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
+            # set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
         #
         self.t += self.del_t
 
@@ -446,6 +448,109 @@ class CDMNonlocalMechanics(CDMSolver):
 
 
 class CDMNonlocal(NonlocalInterface):
+    M: df.fem.Function
+    # fields: dict[str, df.fem.Function]
+    # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
+    rate_evaluator: QuadratureEvaluator
+    parameters: dict[str, float]
+    form: df.fem.FormMetaClass
+    t: float
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(
+        self,
+        Q_local: str,
+        Q_nonlocal_rate: str,
+        t0: float,
+        function_space: df.fem.FunctionSpace,
+        M: df.fem.Function,
+        parameters: dict[str, float],
+        quadrature_rule: QuadratureRule,
+        q_fields_local: dict[str, df.fem.Function],
+        q_field_nonlocal_rate: df.fem.Function,
+        Q_local_damage: str | None = None,
+    ):
+        q_fields = {Q_local: q_fields_local[Q_local]}
+
+        if Q_nonlocal_rate[-4:] != "rate":
+            raise ValueError("Q_nonlocal_rate must be some rate for CDM, you provided " + Q_nonlocal_rate)
+
+        q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
+
+        Q_nonlocal = Q_nonlocal_rate[:-5]
+
+        fields = {
+            Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
+            Q_nonlocal: df.fem.Function(function_space, name=Q_nonlocal),
+            "nonlocal_force": df.fem.Function(function_space, name="nonlocal_force"),
+        }
+
+        test_function = ufl.TestFunction(function_space)
+
+        if Q_local_damage is not None:
+            q_fields[Q_local_damage] = q_fields_local[Q_local_damage]
+
+            eta, R = parameters["eta"], parameters["R"]
+            g = ((1.0 - R) * ufl.exp(-eta * q_fields[Q_local_damage]) + R - math.exp(-eta)) / (1.0 - math.exp(-eta))
+            q_fields["interaction"] = g
+        else:
+            g = 1.0
+
+        f_int_ufl = (
+            g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
+            + fields[Q_nonlocal] * test_function
+        ) * quadrature_rule.dx
+
+        f_ext_ufl = q_fields[Q_local] * test_function * quadrature_rule.dx
+
+        f_ufl = -f_int_ufl + f_ext_ufl
+
+        f_form = df.fem.form(f_ufl)
+
+        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal_rate], function_space.mesh, quadrature_rule)
+        super().__init__(
+            Q_local=Q_local,
+            Q_nonlocal=Q_nonlocal,
+            Q_local_damage=Q_local_damage,
+            Q_nonlocal_rate=Q_nonlocal_rate,
+            t=t0,
+            M=M,
+            parameters=parameters,
+            q_fields=q_fields,
+            fields=fields,
+            form=f_form,
+            rate_evaluator=rate_evaluator,
+        )
+
+    def step(self, h: float) -> None:
+        with self.fields["nonlocal_force"].vector.localForm() as f_local:
+            f_local.set(0.0)
+
+        df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
+        self.fields["nonlocal_force"].x.scatter_reverse(ScatterMode.add)
+
+        c = self.parameters["gamma"] / self.parameters["zeta"]
+        c1 = (2.0 - c * h) / (2.0 + c * h)
+        c2 = 2.0 * h / (2.0 + c * h)
+
+        self.fields[self.Q_nonlocal_rate].vector.array[:] = (
+            c1 * self.fields[self.Q_nonlocal_rate].vector.array
+            + c2 * self.M.vector.array * self.fields["nonlocal_force"].vector.array
+        )
+        self.fields[self.Q_nonlocal_rate].x.scatter_forward()
+
+        self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal_rate].vector.array
+        self.fields[self.Q_nonlocal].x.scatter_forward()
+
+        self.rate_evaluator(self.q_fields[self.Q_nonlocal_rate])
+        self.q_fields[self.Q_nonlocal_rate].x.scatter_forward()
+
+        self.t += h
+
+
+class ImplicitNonlocal(NonlocalInterface):
     M: df.fem.Function
     # fields: dict[str, df.fem.Function]
     # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]

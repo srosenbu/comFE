@@ -51,6 +51,8 @@ pub enum Q {
     InternalElasticEnergy,
     #[strum(serialize = "InternalPlasticEnergy", serialize = "internal_plastic_energy")]
     InternalPlasticEnergy,
+    #[strum(serialize = "InternalHeatingEnergy", serialize = "internal_heating_energy")]
+    InternalHeatingEnergy,
     #[strum(serialize = "InternalEnergyRate", serialize = "internal_energy_rate")]
     InternalEnergyRate,
     #[strum(serialize = "InternalElasticEnergyRate", serialize = "internal_elastic_energy_rate")]
@@ -226,6 +228,7 @@ impl Q {
             Q::InternalEnergy => QDim::Scalar,
             Q::InternalElasticEnergy => QDim::Scalar,
             Q::InternalPlasticEnergy => QDim::Scalar,
+            Q::InternalHeatingEnergy => QDim::Scalar,
             Q::InternalEnergyRate => QDim::Scalar,
             Q::InternalElasticEnergyRate => QDim::Scalar,
             Q::InternalPlasticEnergyRate => QDim::Scalar,
@@ -245,7 +248,7 @@ impl Q {
 }
 
 pub trait ConstitutiveModel {
-    fn new(parameters: &HashMap<String, f64>) -> Self;
+    fn new(parameters: &HashMap<String, f64>) -> Option<Self> where Self: Sized;
     //Mainly for the purpose of telling Python what is needed
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed
