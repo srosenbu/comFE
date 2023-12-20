@@ -1,10 +1,8 @@
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::stress_strain::{
-    deviatoric, mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
+    mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
 };
 
-use nalgebra::{DVectorView, SMatrix};
-use std::cmp;
 use std::collections::HashMap;
 #[derive(Debug)]
 pub struct JH2ConstParameters {
@@ -125,7 +123,7 @@ impl ConstitutiveModel for JH23D {
         let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
         let density_1 = density_0 * (1. - f1) / (1. + f1);
-        assert!(
+        debug_assert!(
             density_1 > 0.0,
             "Negative density encountered in JH2 model: {}",
             density_1
@@ -134,8 +132,6 @@ impl ConstitutiveModel for JH23D {
 
         let mu = density_1 / self.parameters.RHO - 1.;
 
-        //let mut del_p_0 = 0.0;
-        let mut d_eps_vol_pl = 0.0;
         let p_1 = {
             if mu > 0.0 {
                 self.parameters.K1 * mu
@@ -148,27 +144,6 @@ impl ConstitutiveModel for JH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
-                    //let denominator = (density_1-density_0)/self.parameters.RHO;
-                    let pl = p_damaged - p_0;
-                    let el = p_trial - p_0;
-                    d_eps_vol_pl = {
-                        if pl / el >= 1.0 {
-                            d_eps_vol
-                        } else if el != 0.0 {
-                            (1. - pl / el) * d_eps_vol
-                        } else {
-                            d_eps_vol
-                        }
-                    };
-                    //let p_diff = (p_damaged-p_0);
-                    //let del_e = p_diff * d_eps_vol_pl;
-                    //assert!(
-                    //    del_e >= 0.0,
-                    //    "Negative del_e encountered in JH2 model: {}, \np_mid {}, \nd_eps_vol_pl {}, \np_0 {}, \np_damaged {}, \nmu {}, \ndensity_0 {}, \ndensity_1 {}, \npl/el {}, \npl {}, \nel {}, \nd_eps_vol {}, \nd_eps_vol_pl {}, \np_trial {}, \np_damaged {}, \np_0 {}",
-                    //    del_e, p_diff, d_eps_vol_pl, p_0, p_damaged, mu, density_0, density_1, pl/el, pl, el, d_eps_vol, d_eps_vol_pl, p_trial, p_damaged, p_0,
-                    //);
-                    //assert!(pl/el < 1. , "pl/el<1: d_eps_vol {}, d_eps_vol_pl {}, p_trial {}, p_damaged {}, p_0 {}", d_eps_vol, d_eps_vol_pl, p_trial, p_damaged, p_0);
-                    //assert!(pl/el >= 0. , "pl/el>=0: d_eps_vol {}, d_eps_vol_pl {}, p_trial {}, p_damaged {}, p_0 {}", d_eps_vol, d_eps_vol_pl, p_trial, p_damaged, p_0);
                     p_damaged
                 }
             }
@@ -224,47 +199,38 @@ impl ConstitutiveModel for JH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-        //if output.is_some(Q::InternalEnergyRate) {
-        //    output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
-        //}
-
-        // Update optional internal variables if needed
 
         let elastic_rate =
             - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
         
+        let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = -0.5 * (p_0 + p_1) * 0.0; //TODO
-            let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev - elastic_rate;
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
             let e_1 = e_0
-                + del_t / density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
+                + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = -0.5 * (p_0 + p_1) * 0.0; //TODO
-            let density_mid = 0.5 * (density_0 + density_1);
+            let p_mid = -0.5 * (p_0 + p_1);
             let deviatoric_rate = elastic_rate;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
             let e_1 = e_0
                 + del_t / density_mid
-                    * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
+                    * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
-            let density_mid = 0.5 * (density_0 + density_1);
             let e_1 = e_0 + del_t / density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
             let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
             let q_mid = - 0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
-            let density_mid = 0.5 * (density_0 + density_1);
             let e_1 = e_0 + del_t / density_mid * 3. * q_mid * d_eps_vol;
             output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
         }
@@ -316,9 +282,6 @@ impl ConstitutiveModel for JH23D {
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
-            //(Q::InternalEnergyRate, QDim::Scalar),
-            //(Q::InternalElasticEnergyRate, QDim::Scalar),
-            //(Q::InternalPlasticEnergyRate, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {

@@ -1,12 +1,10 @@
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::stress_strain::{
-    deviatoric, mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
+    mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
 };
 
 use crate::jh2::JH2ConstParameters;
 
-use nalgebra::SMatrix;
-use std::cmp;
 use std::collections::HashMap;
 
 #[derive(Debug)]
@@ -112,8 +110,6 @@ impl ConstitutiveModel for GradientJH23D {
 
         let mu = density_1 / self.parameters.RHO - 1.;
         
-        //let mut del_p_0 = 0.0;
-        let mut d_eps_vol_pl = 0.0;
         let p_1 = {
             if mu > 0.0 {
                 self.parameters.K1 * mu
@@ -126,15 +122,6 @@ impl ConstitutiveModel for GradientJH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
-                    let pl = p_damaged - p_0;
-                    let el = p_trial - p_0;
-                    d_eps_vol_pl = {
-                        if el != 0.0 {
-                            (1. - pl / el) * d_eps_vol
-                        } else {
-                            d_eps_vol
-                        }
-                    };
                     p_damaged
                 }
             }
@@ -179,9 +166,6 @@ impl ConstitutiveModel for GradientJH23D {
         // Update optional output variables if needed
         // **********************************************************************
 
-        //if output.is_some(Q::EquivalentPlasticStrain) {
-        //    output.add_scalar(Q::EquivalentPlasticStrain, ip, del_lambda);
-        //}
         if output.is_some(Q::EqStrainRate) {
             output.set_scalar(Q::EqStrainRate, ip, d_eps_eq);
         }
@@ -194,43 +178,34 @@ impl ConstitutiveModel for GradientJH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-        //if output.is_some(Q::InternalEnergyRate) {
-        //    output.set_scalar(Q::InternalEnergyRate, ip, sigma_1.dot(&d_eps));
-        //}
-        
-        // Update optional internal variables if needed
         
         let elastic_rate =
             - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
         
+        let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = - 0.5 * (p_0 + p_1) * 0.0; //TODO 
-            let density_mid = 0.5 * (density_0 + density_1);
             let deviatoric_rate = d_eps_dev - elastic_rate;
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol_pl * p_mid);
+            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = - 0.5 * (p_0 + p_1) * 0.0; //TODO 
-            let density_mid = 0.5 * (density_0 + density_1);
+            let p_mid = - 0.5 * (p_0 + p_1); 
             let deviatoric_rate = elastic_rate;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
-            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * (d_eps_vol - d_eps_vol_pl) * p_mid);
+            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
             let q_mid = - 0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
-            let density_mid = 0.5 * (density_0 + density_1);
             let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
             let e_1 = e_0 + del_t/density_mid * 3.* d_eps_vol * q_mid;
             output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
-            let density_mid = 0.5 * (density_0 + density_1);
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
             let e_1 = e_0 + del_t/density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
@@ -280,9 +255,6 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::MandelStrainRate, QDim::Vector(6)),
             (Q::MisesStress, QDim::Scalar),
             (Q::Pressure, QDim::Scalar),
-            //(Q::InternalEnergyRate, QDim::Scalar),
-            //(Q::InternalElasticEnergyRate, QDim::Scalar),
-            //(Q::InternalPlasticEnergyRate, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
