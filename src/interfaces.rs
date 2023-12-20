@@ -21,8 +21,14 @@ pub enum Q {
     MandelTangent,
     #[strum(serialize = "VelocityGradient", serialize = "velocity_gradient")]
     VelocityGradient,
+    #[strum(serialize = "EqNonlocalPlasticStrain", serialize = "equivalent_nonlocal_plastic_strain")]
+    EqNonlocalPlasticStrain,
+    #[strum(serialize = "EqNonlocalPlasticStrainRate", serialize = "equivalent_nonlocal_plastic_strain_rate")]
+    EqNonlocalPlasticStrainRate,
     #[strum(serialize = "EqNonlocalStrain", serialize = "equivalent_nonlocal_strain")]
     EqNonlocalStrain,
+    #[strum(serialize = "EqNonlocalStrainRate", serialize = "equivalent_nonlocal_strain_rate")]
+    EqNonlocalStrainRate,
     #[strum(serialize = "Lambda", serialize = "lambda")]
     Lambda,
     #[strum(serialize =  "Density", serialize = "density")]
@@ -41,10 +47,22 @@ pub enum Q {
     MisesStress,
     #[strum(serialize = "InternalEnergy", serialize = "internal_energy")]
     InternalEnergy,
+    #[strum(serialize = "InternalElasticEnergy", serialize = "internal_elastic_energy")]
+    InternalElasticEnergy,
+    #[strum(serialize = "InternalPlasticEnergy", serialize = "internal_plastic_energy")]
+    InternalPlasticEnergy,
+    #[strum(serialize = "InternalHeatingEnergy", serialize = "internal_heating_energy")]
+    InternalHeatingEnergy,
     #[strum(serialize = "InternalEnergyRate", serialize = "internal_energy_rate")]
     InternalEnergyRate,
     #[strum(serialize = "InternalElasticEnergyRate", serialize = "internal_elastic_energy_rate")]
     InternalElasticEnergyRate,
+    #[strum(serialize = "InternalPlasticEnergyRate", serialize = "internal_plastic_energy_rate")]
+    InternalPlasticEnergyRate,
+    #[strum(serialize = "BulkViscosity", serialize = "bulk_viscosity")]
+    BulkViscosity,
+    #[strum(serialize = "CellDiameter", serialize = "cell_diameter")]
+    CellDiameter,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -171,12 +189,14 @@ impl QDim {
             QDim::Tensor(n, m) => *n * *m,
         }
     }
+    //TODO: Later this should return a tuple of (n,m) for all
+    // cases. 
     pub const fn dim(&self) -> usize {
         match self {
             QDim::Scalar => 1,
             QDim::Vector(n) => *n,
             QDim::SquareTensor(n) => *n,
-            QDim::Tensor(n, m) => panic!("Tensor dimensions are not implemented yet."),
+            QDim::Tensor(_n, _m) => panic!("Tensor dimensions are not implemented yet."),
         }
     }
 }
@@ -194,6 +214,9 @@ impl Q {
             Q::MandelTangent => QDim::SquareTensor(6),
             Q::VelocityGradient => QDim::SquareTensor(3),
             Q::EqNonlocalStrain => QDim::Scalar,
+            Q::EqNonlocalStrainRate => QDim::Scalar,
+            Q::EqNonlocalPlasticStrain => QDim::Scalar,
+            Q::EqNonlocalPlasticStrainRate => QDim::Scalar,
             Q::Lambda => QDim::Scalar,
             Q::Density => QDim::Scalar,
             Q::Pressure => QDim::Scalar,
@@ -203,8 +226,14 @@ impl Q {
             Q::EqPlasticStrain => QDim::Scalar,
             Q::MisesStress => QDim::Scalar,
             Q::InternalEnergy => QDim::Scalar,
+            Q::InternalElasticEnergy => QDim::Scalar,
+            Q::InternalPlasticEnergy => QDim::Scalar,
+            Q::InternalHeatingEnergy => QDim::Scalar,
             Q::InternalEnergyRate => QDim::Scalar,
             Q::InternalElasticEnergyRate => QDim::Scalar,
+            Q::InternalPlasticEnergyRate => QDim::Scalar,
+            Q::BulkViscosity => QDim::Scalar,
+            Q::CellDiameter => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
         }
     }
@@ -219,7 +248,7 @@ impl Q {
 }
 
 pub trait ConstitutiveModel {
-    fn new(parameters: &HashMap<String, f64>) -> Self;
+    fn new(parameters: &HashMap<String, f64>) -> Option<Self> where Self: Sized;
     //Mainly for the purpose of telling Python what is needed
     fn define_input(&self) -> HashMap<Q, QDim>;
     //Mainly for the purpose of telling Python what is needed
@@ -279,4 +308,13 @@ pub trait ConstitutiveModel {
             return Err("There are inconsistencies in input and output sizes.");
         }
     }
+}
+
+
+struct QValue<'a>(&'a [f64]);
+struct QValueMut<'a>(&'a mut [f64]);
+
+trait Input {
+    fn get_array<const N:usize>(&self, i:usize) -> &[f64; N];
+    fn get_scalar(&self, i:usize) -> f64;
 }

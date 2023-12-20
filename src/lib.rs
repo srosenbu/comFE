@@ -3,6 +3,9 @@ use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::jh2::JH23D;
+//use crate::jh_concrete::JHConcrete3D;
+use crate::generic_jh2::GenericJH23D;
+use crate::gradient_jh2::GradientJH23D;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
 //use crate::stress_strain;
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
@@ -13,6 +16,9 @@ use pyo3::types::PyDict;
 use std::str::FromStr;
 pub mod interfaces;
 pub mod jh2;
+//pub mod jh_concrete;
+pub mod generic_jh2;
+pub mod gradient_jh2;
 pub mod smallstrain;
 pub mod stress_strain;
 
@@ -32,7 +38,7 @@ macro_rules! impl_constitutive_model {
         impl $name {
             #[new]
             fn new(parameters: HashMap<String, f64>) -> PyResult<Self>{
-                let model = <$model>::new(&parameters);
+                let model = <$model>::new(&parameters).unwrap();
                 Ok($name { model: model })
             }
             fn __str__(&self) -> PyResult<String> {
@@ -361,7 +367,7 @@ fn py_jaumann_rotation(
     velocity_gradient: PyReadonlyArray1<f64>,
     stress: PyReadwriteArray1<f64>,
 ) -> PyResult<()> {
-    let mut velocity_gradient = velocity_gradient
+    let velocity_gradient = velocity_gradient
         .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
         .unwrap();
     let mut stress = stress
@@ -376,7 +382,7 @@ fn py_jaumann_rotation_expensive(
     velocity_gradient: PyReadonlyArray1<f64>,
     stress: PyReadwriteArray1<f64>,
 ) -> PyResult<()> {
-    let mut velocity_gradient = velocity_gradient
+    let velocity_gradient = velocity_gradient
         .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
         .unwrap();
     let mut stress = stress
@@ -390,6 +396,7 @@ fn py_jaumann_rotation_expensive(
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;
     impl_constitutive_model!(PyJH23D, JH23D, m);
+    impl_constitutive_model!(PyGradientJH23D, GradientJH23D, m);
     impl_constitutive_model!(PyLinElas3D, LinearElastic3D, m);
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;

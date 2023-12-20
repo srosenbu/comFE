@@ -1,19 +1,17 @@
-import numpy as np
-import dolfinx as dfx
-import comfe as co
 import basix
+import comfe as co
+import dolfinx as dfx
+import numpy as np
+import pytest
 import ufl
-from scipy.spatial import KDTree
-import pytest 
 from mpi4py import MPI
+from scipy.spatial import KDTree
 
 
 def y_i(pressure, parameters):
     p_s = pressure / parameters["PHEL"]
     t_s = parameters["T"] / parameters["PHEL"]
-    return (
-        parameters["SIGMAHEL"] * parameters["A"] * np.power(p_s + t_s, parameters["N"])
-    )
+    return parameters["SIGMAHEL"] * parameters["A"] * np.power(p_s + t_s, parameters["N"])
 
 
 def y_f(pressure, parameters):
@@ -401,6 +399,8 @@ case_1 = {"parameters": case1_parameters, "points": case1_points}
 case_2 = {"parameters": case2_parameters, "points": case2_points}
 case_3 = {"parameters": case3_parameters, "points": case3_points}
 case_3a = {"parameters": case3a_parameters, "points": case3a_points}
+
+
 @pytest.mark.parametrize(
     "test_case",
     [
@@ -408,7 +408,7 @@ case_3a = {"parameters": case3a_parameters, "points": case3a_points}
         case_3a,
     ],
 )
-def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
+def test_single_element_2d(test_case: dict, plot: str | None = None) -> None:
     mesh = dfx.mesh.create_rectangle(
         MPI.COMM_WORLD,
         np.array([[0, 0], [1000.0, 1000.0]]),
@@ -425,7 +425,7 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     fdim = tdim - 1
     mesh.topology.create_connectivity(fdim, tdim)
 
-    P1 = dfx.fem.VectorFunctionSpace(mesh, ("CG", 1))
+    P1 = dfx.fem.VectorFunctionSpace(mesh, ("Lagrange", 1))
     u = dfx.fem.Function(P1)
     t_end = 100.0
     v_bc = -50.0 / t_end
@@ -437,20 +437,13 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     ]
     values = [0.0, 0.0, 0.0, v_bc]
     subspaces = [0, 0, 1, 1]
-    boundary_facets = [
-        dfx.mesh.locate_entities_boundary(mesh, mesh.topology.dim - 1, domain)
-        for domain in domains
-    ]
+    boundary_facets = [dfx.mesh.locate_entities_boundary(mesh, mesh.topology.dim - 1, domain) for domain in domains]
     bc_dofs = [
         dfx.fem.locate_dofs_topological(P1.sub(i), mesh.topology.dim - 1, facet)
         for facet, i in zip(boundary_facets, subspaces)
     ]
 
-
-    bcs = [
-        dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i))
-        for value, dofs, i in zip(values, bc_dofs, subspaces)
-    ]
+    bcs = [dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i)) for value, dofs, i in zip(values, bc_dofs, subspaces)]
 
     parameters = test_case["parameters"]
     law = co.laws.PyJH23D(parameters)
@@ -458,8 +451,7 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     v_ = ufl.TestFunction(P1)
     u_ = ufl.TrialFunction(P1)
 
-
-    h = 1e-1 
+    h = 1e-1
 
     mass_form = ufl.inner(u_, v_) * parameters["RHO"] * ufl.dx
 
@@ -472,29 +464,34 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
     M_function = dfx.fem.Function(P1)
     M_function.vector.array[:] = M_action.array
 
-
     M_action.array[:] = 1.0 / M_action.array
     M_action.ghostUpdate()
 
-    solver = co.cdm.CDMPlaneStrainX(P1, 0, None, bcs, M_function, law, rule, additional_output=["mises_stress", "pressure", "equivalent_plastic_strain"])
+    solver = co.cdm.CDMPlaneStrain(
+        P1,
+        0,
+        None,
+        bcs,
+        M_function,
+        law,
+        rule,
+        additional_output=["mises_stress", "pressure", "equivalent_plastic_strain"],
+    )
     solver.model.input["density"].vector.array[:] += parameters["RHO"]
     solver.model.output["density"].vector.array[:] += parameters["RHO"]
     s_eq_ = []
     p_ = []
-    
+
     while solver.t < t_end:
         solver.step(h)
         u_ = max(abs(solver.fields["u"].vector.array))
         p_.append(solver.q_fields["pressure"].vector.array[0])
         s_eq_.append(solver.q_fields["mises_stress"].vector.array[0])
-    
+
     values = [0.0, 0.0, 0.0, -v_bc]
     subspaces = [0, 0, 1, 1]
-    
-    bcs = [
-        dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i))
-        for value, dofs, i in zip(values, bc_dofs, subspaces)
-    ]
+
+    bcs = [dfx.fem.dirichletbc(np.array(value), dofs, P1.sub(i)) for value, dofs, i in zip(values, bc_dofs, subspaces)]
     solver.bcs = bcs
 
     while solver.t < 2.0 * t_end:  # and counter <= 2000:
@@ -502,29 +499,31 @@ def test_single_element_2d(test_case: dict, plot:str | None = None) -> None:
         u_ = max(abs(solver.fields["u"].vector.array))
         p_.append(solver.q_fields["pressure"].vector.array[0])
         s_eq_.append(solver.q_fields["mises_stress"].vector.array[0])
-    
+
     p_ = np.array(p_).reshape((-1, 1))
     s_eq_ = np.array(s_eq_).reshape((-1, 1))
-    
+
     points = np.hstack((p_, s_eq_))
     tree = KDTree(points)
     distances = tree.query(test_case["points"])
-    assert np.mean(distances[0]/np.max(np.abs(test_case["points"][:,1]))) < 0.05
-    
+    assert np.mean(distances[0] / np.max(np.abs(test_case["points"][:, 1]))) < 0.05
+
     if plot is not None:
-        import matplotlib.pyplot as plt
         import matplotlib
+        import matplotlib.pyplot as plt
+
         matplotlib.use("Agg", force=True)
         p_debug = np.linspace(0.0, 8.0, 100)
-        plt.plot(p_debug, y_i(p_debug, parameters))
-        plt.plot(p_debug, y_f(p_debug, parameters))
+        # plt.plot(p_debug, y_i(p_debug, parameters))
+        # plt.plot(p_debug, y_f(p_debug, parameters))
         plt.plot(p_, s_eq_)
-        plt.scatter(test_case["points"][:,0], test_case["points"][:,1])
+        plt.scatter(test_case["points"][:, 0], test_case["points"][:, 1])
         plt.xlabel("Pressure [GPa]")
         plt.ylabel("Equiv. Stress [GPa]")
         plt.title(f"JH2 test")
         plt.savefig(f"{plot}.png")
         plt.clf()
+
 
 if __name__ == "__main__":
     test_single_element_2d(case_3a, plot="jh2_case_3a")

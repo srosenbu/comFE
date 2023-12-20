@@ -10,7 +10,7 @@ pub struct LinearElastic3D {
 
 
 impl ConstitutiveModel for LinearElastic3D {
-    fn new(parameters: &HashMap<String, f64>) -> Self {
+    fn new(parameters: &HashMap<String, f64>) -> Option<Self> {
         let E = parameters.get("E").unwrap();
         let nu = parameters.get("nu").unwrap();
         let mu = E / (2.0 * (1.0 + nu));
@@ -53,7 +53,7 @@ impl ConstitutiveModel for LinearElastic3D {
             0.0,
             2.0 * mu,
         );
-        Self { D: D }
+        Some(Self { D: D })
     }
     fn evaluate_ip(&self, ip: usize, _del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let strain = input.get_vector::<{Q::MandelStrain.size()}>(Q::MandelStrain, ip);
