@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::jh2::JH23D;
+use crate::jhr::JHR3D;
 //use crate::jh_concrete::JHConcrete3D;
 use crate::generic_jh2::GenericJH23D;
 use crate::gradient_jh2::GradientJH23D;
@@ -19,6 +20,7 @@ pub mod jh2;
 //pub mod jh_concrete;
 pub mod generic_jh2;
 pub mod gradient_jh2;
+pub mod jhr;
 pub mod smallstrain;
 pub mod stress_strain;
 

@@ -10,47 +10,49 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct JHR3D {
-    _density: f64,
-    _a: f64,
-    _b: f64,
-    _n: f64,
-    _f_c: f64,
-    _s_max: f64,
-    _shear_modulus: f64,
-    _d_1: f64,
-    _d_2: f64,
-    _eps_f_min: f64,
-    _p_crush: f64,
-    _mu_crush: f64,
-    _p_lock: f64,
-    _mu_lock: f64,
-    _k_1: f64,
-    _k_2: f64,
-    _k_3: f64,
-    _t: f64,
+    RHO: f64,
+    SHEAR_MODULUS: f64,
+    A: f64,
+    B: f64,
+    C: f64,
+    M: f64,
+    N: f64,
+    EPS0: f64,
+    T: f64,
+    SIGMAHEL: f64,
+    PHEL: f64,
+    D1: f64,
+    D2: f64,
+    K1: f64,
+    K2: f64,
+    K3: f64,
+    BETA: f64,
+    EFMIN: f64,
+    DMAX: f64,
 }
 
 impl ConstitutiveModel for JHR3D {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self> {
         Some(Self {
-                _density: *parameters.get("density")?,
-                _a: *parameters.get("a")?,
-                _b: *parameters.get("b")?,
-                _n: *parameters.get("n")?,
-                _f_c: *parameters.get("f_c")?,
-                _s_max: *parameters.get("s_max")?,
-                _shear_modulus: *parameters.get("shear_modulus")?,
-                _d_1: *parameters.get("d_1")?,
-                _d_2: *parameters.get("d_2")?,
-                _eps_f_min: *parameters.get("eps_f_min")?,
-                _p_crush: *parameters.get("p_crush")?,
-                _mu_crush: *parameters.get("mu_crush")?,
-                _p_lock: *parameters.get("p_lock")?,
-                _mu_lock: *parameters.get("mu_lock")?,
-                _k_1: *parameters.get("k_1")?,
-                _k_2: *parameters.get("k_2")?,
-                _k_3: *parameters.get("k_3")?,
-                _t: *parameters.get("t")?,
+                RHO: *parameters.get("RHO")?,
+                SHEAR_MODULUS: *parameters.get("SHEAR_MODULUS")?,
+                A: *parameters.get("A")?,
+                B: *parameters.get("B")?,
+                C: *parameters.get("C")?,
+                M: *parameters.get("M")?,
+                N: *parameters.get("N").unwrap(),
+                EPS0: *parameters.get("EPS0").unwrap(),
+                T: *parameters.get("T").unwrap(),
+                SIGMAHEL: *parameters.get("SIGMAHEL").unwrap(),
+                PHEL: *parameters.get("PHEL").unwrap(),
+                D1: *parameters.get("D1").unwrap(),
+                D2: *parameters.get("D2").unwrap(),
+                K1: *parameters.get("K1").unwrap(),
+                K2: *parameters.get("K2").unwrap(),
+                K3: *parameters.get("K3").unwrap(),
+                BETA: *parameters.get("BETA").unwrap(),
+                EFMIN: *parameters.get("EFMIN").unwrap(),
+                DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
             })
     }
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
@@ -73,22 +75,22 @@ impl ConstitutiveModel for JHR3D {
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
 
-        let s_tr = s_0 + 2. * self._shear_modulus * d_eps_dev * del_t;
+        let s_tr = s_0 + 2. * self.SHEAR_MODULUS * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
         let d_eps_eq = ((2. / 3.) * d_eps.norm_squared()).sqrt();
         let mut alpha;
 
-        let p_s = p_0 / self.parameters.PHEL;
-        let t_s = self.parameters.T / self.parameters.PHEL;
+        let p_s = p_0 / self.PHEL;
+        let t_s = self.T / self.PHEL;
         let mut rate_factor = 1.;
 
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            (self.A * (p_s + t_s*(1.-damage_0)).powf(self.N) * self.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
-            (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
-        if d_eps_eq >= self.parameters.EPS0 {
-            rate_factor += self.parameters.C * (d_eps_eq / self.parameters.EPS0).ln();
+            (self.B * (p_s).powf(self.M) * self.SIGMAHEL).max(0.0);
+        if d_eps_eq >= self.EPS0 {
+            rate_factor += self.C * (d_eps_eq / self.EPS0).ln();
         }
         let yield_surface = rate_factor * {
             if damage_0 == 0.0 {
@@ -98,13 +100,13 @@ impl ConstitutiveModel for JHR3D {
             }
         };
         if s_tr_eq > yield_surface {
-            let e_p_f = (self.parameters.D1 * (p_s + t_s).powf(self.parameters.D2))
-                .max(self.parameters.EFMIN);
+            let e_p_f = (self.D1 * (p_s + t_s).powf(self.D2))
+                .max(self.EFMIN);
 
-            del_lambda = (s_tr_eq - yield_surface) / (3. * self.parameters.SHEAR_MODULUS);
+            del_lambda = (s_tr_eq - yield_surface) / (3. * self.SHEAR_MODULUS);
             alpha = yield_surface / s_tr_eq;
 
-            damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
+            damage_1 = (damage_0 + del_lambda / e_p_f).min(self.DMAX);
             output.set_scalar(Q::Damage, ip, damage_1);
         } else {
             alpha = 1.0;
@@ -126,17 +128,17 @@ impl ConstitutiveModel for JHR3D {
         );
         output.set_scalar(Q::Density, ip, density_1);
 
-        let mu = density_1 / self.parameters.RHO - 1.;
+        let mu = density_1 / self.RHO - 1.;
 
         let p_1 = {
             if mu > 0.0 {
-                self.parameters.K1 * mu
-                    + self.parameters.K2 * mu.powi(2)
-                    + self.parameters.K3 * mu.powi(3)
-                    + input.get_scalar(Q::BulkingPressure, ip)
+                self.K1 * mu
+                    + self.K2 * mu.powi(2)
+                    + self.K3 * mu.powi(3)
+                    //+ input.get_scalar(Q::BulkingPressure, ip)
             } else {
-                let p_trial = self.parameters.K1 * mu;
-                let p_damaged = -self.parameters.T * (1. - damage_1);
+                let p_trial = self.K1 * mu;
+                let p_damaged = -self.T * (1. - damage_1);
                 if p_trial > p_damaged {
                     p_trial
                 } else {
@@ -144,26 +146,11 @@ impl ConstitutiveModel for JHR3D {
                 }
             }
         };
-        if damage_1 > damage_0 {
-            let y_old = damage_0 * residual_surface + (1. - damage_0) * fracture_surface;
-            let y_new = damage_1 * residual_surface + (1. - damage_1) * fracture_surface;
-            let u_old = y_old.powi(2) / (6. * self.parameters.SHEAR_MODULUS);
-            let u_new = y_new.powi(2) / (6. * self.parameters.SHEAR_MODULUS);
-
-            let del_u = u_old - u_new;
-
-            let del_p_0 = input.get_scalar(Q::BulkingPressure, ip);
-            let del_p = -self.parameters.K1 * mu
-                + ((self.parameters.K1 * mu + del_p_0).powi(2)
-                    + 2. * self.parameters.BETA * self.parameters.K1 * del_u)
-                    .sqrt();
-            output.set_scalar(Q::BulkingPressure, ip, del_p);
-        }
 
         // Calculate bulk viscosity
         let l = input.get_scalar(Q::CellDiameter, ip);
         let tr_deps = d_eps_vol * 3.;
-        let c = (self.parameters.K1 / self.parameters.RHO).sqrt();
+        let c = (self.K1 / self.RHO).sqrt();
         let q_1 = {
             if tr_deps < 0.0 {
                 l * density_1 * (1.5 * l * tr_deps.powi(2) + c * 0.06 * tr_deps.abs())
@@ -197,7 +184,7 @@ impl ConstitutiveModel for JHR3D {
         }
 
         let elastic_rate =
-            - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
+            - (1. - alpha) / (2. * self.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
         
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
@@ -255,7 +242,6 @@ impl ConstitutiveModel for JHR3D {
         HashMap::from([
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
-            (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
             (Q::BulkViscosity, QDim::Scalar),
         ])

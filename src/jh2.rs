@@ -25,6 +25,7 @@ pub struct JH2ConstParameters {
     pub BETA: f64,
     pub EFMIN: f64,
     pub DMAX: f64,
+    pub REDUCE_T: f64,
 }
 #[derive(Debug)]
 pub struct JH23D {
@@ -54,6 +55,7 @@ impl ConstitutiveModel for JH23D {
                 BETA: *parameters.get("BETA").unwrap(),
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
+                REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
     }
@@ -85,9 +87,9 @@ impl ConstitutiveModel for JH23D {
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
-
+        let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            (self.parameters.A * (p_s + t_s * t_s_factor).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
