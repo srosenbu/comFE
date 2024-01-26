@@ -87,6 +87,7 @@ impl ConstitutiveModel for JH23D {
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
+        
         let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
         let fracture_surface =
             (self.parameters.A * (p_s + t_s * t_s_factor).powf(self.parameters.N) * self.parameters.SIGMAHEL)
