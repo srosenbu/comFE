@@ -177,10 +177,12 @@ def project(v, V, dx, u=None):
     if u is None:
         solver = df.fem.petsc.LinearProblem(a_proj, b_proj)
         uh = solver.solve()
+        uh.x.scatter_forward()
         return uh
     else:
         solver = df.fem.petsc.LinearProblem(a_proj, b_proj, u=u)
         solver.solve()
+        u.x.scatter_forward()
 
 
 def diagonal_mass(function_space, rho, invert=True) -> df.fem.Function:
@@ -221,6 +223,8 @@ def diagonal_mass(function_space, rho, invert=True) -> df.fem.Function:
         M_action.vector.array = (M * ones).array
     if invert:
         M_action.vector.array[:] = 1.0 / M_action.vector.array
+
+    M_action.x.scatter_forward()
     return M_action
 
 

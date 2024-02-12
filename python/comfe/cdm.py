@@ -232,7 +232,7 @@ class CDM3D(CDMSolver):
         # print(sigma.vector.array)
 
         jaumann_rotation(h, L.vector.array, sigma.vector.array)
-
+        sigma.x.scatter_forward()
         # if self.nonlocal_var is not None:
         #    input_list[
         #        self.nonlocal_var.Q_nonlocal
