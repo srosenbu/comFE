@@ -35,7 +35,8 @@ impl ConstitutiveModel for GradientJH23D {
                 BETA: *parameters.get("BETA").unwrap(),
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
-                REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
+                E_F: *parameters.get("E_F").unwrap_or(&0.0),
+                //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
     }
@@ -71,12 +72,20 @@ impl ConstitutiveModel for GradientJH23D {
             .max(self.parameters.EFMIN);
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
-        let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
+        let mut damage_1 = 0.0;
+        if self.parameters.E_F > 0.0 {
+            let lambda_old = - self.parameters.E_F * (1. - damage_0).ln();
+            let lambda_new = lambda_old + del_lambda_nonlocal;
+            damage_1 = 1. - (-lambda_new / self.parameters.E_F).exp();
+        } else {
+            damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
+        }
+        //let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         output.set_scalar(Q::Damage, ip, damage_1);
         
-        let t_s_factor = (1.-damage_1).powf(self.parameters.REDUCE_T);
+        //let t_s_factor = (1.-damage_1).powf(self.parameters.REDUCE_T);
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s * t_s_factor).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);

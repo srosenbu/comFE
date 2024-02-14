@@ -394,23 +394,23 @@ fn py_jaumann_rotation_expensive(
     stress_strain::jaumann_rotation_expensive(del_t, &velocity_gradient, &mut stress);
     Ok(())
 }
-#[pyfunction(name="evaluate_elasticity_3d")]
-fn py_evaluate_elasticity_3d(
-    del_t: f64,
-    stress: PyReadwriteArray1<f64>,
-    del_strain: PyReadonlyArray1<f64>,
-    parameters: PyReadonlyArray1<f64>,
-    history: PyReadwriteArray1<f64>,
-    tangent: PyReadwriteArray1<f64>,
-) -> PyResult<()> {
-    let stress = stress.as_slice_mut()?;
-    let del_strain = del_strain.as_slice()?;
-    let parameters = parameters.as_slice()?;
-    let history = history.as_slice_mut()?;
-    let mut tangent = tangent.as_slice_mut()?;
-    evaluate_model::<6,0,2>(&elasticity_3d, del_t, stress, del_strain, parameters, history, tangent);
-    Ok(())
-}
+// #[pyfunction(name="evaluate_elasticity_3d")]
+// fn py_evaluate_elasticity_3d(
+//     del_t: f64,
+//     stress: PyReadwriteArray1<f64>,
+//     del_strain: PyReadonlyArray1<f64>,
+//     parameters: PyReadonlyArray1<f64>,
+//     history: PyReadwriteArray1<f64>,
+//     tangent: PyReadwriteArray1<f64>,
+// ) -> PyResult<()> {
+//     let stress = stress.as_slice_mut()?;
+//     let del_strain = del_strain.as_slice()?;
+//     let parameters = parameters.as_slice()?;
+//     let history = history.as_slice_mut()?;
+//     let mut tangent = tangent.as_slice_mut()?;
+//     evaluate_model::<6,0,2>(&elasticity_3d, del_t, stress, del_strain, parameters, history, tangent);
+//     Ok(())
+// }
 #[pymodule]
 fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLinearElastic3D>()?;

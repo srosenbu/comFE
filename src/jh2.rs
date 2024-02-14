@@ -25,7 +25,8 @@ pub struct JH2ConstParameters {
     pub BETA: f64,
     pub EFMIN: f64,
     pub DMAX: f64,
-    pub REDUCE_T: f64,
+    pub E_F: f64,
+    //pub REDUCE_T: f64,
 }
 #[derive(Debug)]
 pub struct JH23D {
@@ -55,7 +56,8 @@ impl ConstitutiveModel for JH23D {
                 BETA: *parameters.get("BETA").unwrap(),
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
-                REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
+                E_F: *parameters.get("E_F").unwrap_or(&0.0),
+                //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
     }
@@ -88,9 +90,9 @@ impl ConstitutiveModel for JH23D {
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
         
-        let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
+        //let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s * t_s_factor).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
@@ -111,7 +113,14 @@ impl ConstitutiveModel for JH23D {
             del_lambda = (s_tr_eq - yield_surface) / (3. * self.parameters.SHEAR_MODULUS);
             alpha = yield_surface / s_tr_eq;
 
-            damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
+            if self.parameters.E_F > 0.0 {
+                let lambda_old = - self.parameters.E_F * (1. - damage_0).ln();
+                let lambda_new = lambda_old + del_lambda;
+                damage_1 = 1. - (-lambda_new / self.parameters.E_F).exp();
+            } else {
+                damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
+            }
+            //damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
             output.set_scalar(Q::Damage, ip, damage_1);
         } else {
             alpha = 1.0;
