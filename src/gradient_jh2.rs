@@ -52,10 +52,12 @@ impl ConstitutiveModel for GradientJH23D {
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
         //let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
-        let del_lambda_nonlocal = (input.get_scalar(Q::EqNonlocalPlasticStrain, ip)- input.get_scalar(Q::HistoryMaximum, ip)).max(0.0);
-        if del_lambda_nonlocal > 0.0 {
-            output.set_scalar(Q::HistoryMaximum, ip, input.get_scalar(Q::EqNonlocalPlasticStrain, ip));
-        }
+        let nonlocal_plastic_strain = input.get_scalar(Q::EqNonlocalPlasticStrain, ip);
+        let history_maximum_0 = input.get_scalar(Q::HistoryMaximum, ip);
+        //let del_lambda_nonlocal = input.get_scalar(Q::EqNonlocalPlasticStrain, ip)- input.get_scalar(Q::HistoryMaximum, ip);
+        let history_maximum_1 = history_maximum_0.max(nonlocal_plastic_strain);
+        let del_lambda_nonlocal = history_maximum_1 - history_maximum_0;
+        output.set_scalar(Q::HistoryMaximum, ip, history_maximum_1);
 
         let mut del_lambda = 0.0;
         
@@ -79,7 +81,7 @@ impl ConstitutiveModel for GradientJH23D {
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = 0.0;
         if self.parameters.E_F > 0.0 {
-            damage_1 = 1. - (-input.get_scalar(Q::EqNonlocalPlasticStrain, ip) / self.parameters.E_F).exp();
+            damage_1 = 1. - (-history_maximum_1 / self.parameters.E_F).exp();
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }
