@@ -678,7 +678,7 @@ class CDMNonlocalMechanics(CDMSolver):
             nonlocal_parameters,
             quadrature_rule,
             mechanics_solver.q_fields,
-            mechanics_solver.model.input[Q_nonlocal_rate],
+            mechanics_solver.model.input[Q_nonlocal],
             Q_local_damage=Q_local_damage,
         )
 

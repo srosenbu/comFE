@@ -52,7 +52,7 @@ impl ConstitutiveModel for GradientJH23D {
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
         //let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
-        let del_lambda_nonlocal = (input.get_scalar(Q::HistoryMaximum, ip) - input.get_scalar(Q::EqNonlocalPlasticStrain, ip)).max(0.0);
+        let del_lambda_nonlocal = (input.get_scalar(Q::EqNonlocalPlasticStrain, ip)- input.get_scalar(Q::HistoryMaximum, ip)).max(0.0);
         if del_lambda_nonlocal > 0.0 {
             output.set_scalar(Q::HistoryMaximum, ip, input.get_scalar(Q::EqNonlocalPlasticStrain, ip));
         }
