@@ -361,7 +361,7 @@ class CDMNonlocal(NonlocalInterface):
     M: df.fem.Function
     # fields: dict[str, df.fem.Function]
     # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
-    rate_evaluator: QuadratureEvaluator
+    strain_evaluator: QuadratureEvaluator
     parameters: dict[str, float]
     form: df.fem.FormMetaClass
     t: float
@@ -379,7 +379,7 @@ class CDMNonlocal(NonlocalInterface):
         parameters: dict[str, float],
         quadrature_rule: QuadratureRule,
         q_fields_local: dict[str, df.fem.Function],
-        q_field_nonlocal_rate: df.fem.Function,
+        q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
@@ -387,9 +387,8 @@ class CDMNonlocal(NonlocalInterface):
         if Q_nonlocal_rate[-4:] != "rate":
             raise ValueError("Q_nonlocal_rate must be some rate for CDM, you provided " + Q_nonlocal_rate)
 
-        q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
-
         Q_nonlocal = Q_nonlocal_rate[:-5]
+        q_fields[Q_nonlocal] = q_field_nonlocal
 
         fields = {
             Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
@@ -419,7 +418,7 @@ class CDMNonlocal(NonlocalInterface):
 
         f_form = df.fem.form(f_ufl)
 
-        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal_rate], function_space.mesh, quadrature_rule)
+        strain_evaluator = QuadratureEvaluator(fields[Q_nonlocal], function_space.mesh, quadrature_rule)
         super().__init__(
             Q_local=Q_local,
             Q_nonlocal=Q_nonlocal,
@@ -431,7 +430,7 @@ class CDMNonlocal(NonlocalInterface):
             q_fields=q_fields,
             fields=fields,
             form=f_form,
-            rate_evaluator=rate_evaluator,
+            strain_evaluator=strain_evaluator,
         )
 
     def step(self, h: float) -> None:
@@ -454,8 +453,8 @@ class CDMNonlocal(NonlocalInterface):
         self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal_rate].vector.array
         self.fields[self.Q_nonlocal].x.scatter_forward()
 
-        self.rate_evaluator(self.q_fields[self.Q_nonlocal_rate])
-        self.q_fields[self.Q_nonlocal_rate].x.scatter_forward()
+        self.strain_evaluator(self.q_fields[self.Q_nonlocal])
+        self.q_fields[self.Q_nonlocal].x.scatter_forward()
 
         self.t += h
 

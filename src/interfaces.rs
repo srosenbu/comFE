@@ -63,6 +63,8 @@ pub enum Q {
     BulkViscosity,
     #[strum(serialize = "CellDiameter", serialize = "cell_diameter")]
     CellDiameter,
+    #[strum(serialize = "HistoryMaximum", serialize = "history_maximum")]
+    HistoryMaximum,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -234,6 +236,7 @@ impl Q {
             Q::InternalPlasticEnergyRate => QDim::Scalar,
             Q::BulkViscosity => QDim::Scalar,
             Q::CellDiameter => QDim::Scalar,
+            Q::HistoryMaximum => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
         }
     }

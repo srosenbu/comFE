@@ -51,7 +51,12 @@ impl ConstitutiveModel for GradientJH23D {
         d_eps_vol *= -1.0;
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-        let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
+        //let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
+        let del_lambda_nonlocal = (input.get_scalar(Q::HistoryMaximum, ip) - input.get_scalar(Q::EqNonlocalPlasticStrain, ip)).max(0.0);
+        if del_lambda_nonlocal > 0.0 {
+            output.set_scalar(Q::HistoryMaximum, ip, input.get_scalar(Q::EqNonlocalPlasticStrain, ip));
+        }
+
         let mut del_lambda = 0.0;
         
 
@@ -74,9 +79,7 @@ impl ConstitutiveModel for GradientJH23D {
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = 0.0;
         if self.parameters.E_F > 0.0 {
-            let lambda_old = - self.parameters.E_F * (1. - damage_0).ln();
-            let lambda_new = lambda_old + del_lambda_nonlocal;
-            damage_1 = 1. - (-lambda_new / self.parameters.E_F).exp();
+            damage_1 = 1. - (-input.get_scalar(Q::EqNonlocalPlasticStrain, ip) / self.parameters.E_F).exp();
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }
@@ -229,7 +232,8 @@ impl ConstitutiveModel for GradientJH23D {
     fn define_input(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::VelocityGradient, QDim::SquareTensor(3)),
-            (Q::EqNonlocalPlasticStrainRate, QDim::Scalar),
+            //(Q::EqNonlocalPlasticStrainRate, QDim::Scalar),
+            (Q::EqNonlocalPlasticStrain, QDim::Scalar),
             (Q::CellDiameter, QDim::Scalar),
         ])
     }
@@ -244,6 +248,7 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::Density, QDim::Scalar),
             (Q::EqPlasticStrain, QDim::Scalar),
             (Q::BulkViscosity, QDim::Scalar),
+            (Q::HistoryMaximum, QDim::Scalar),
         ])
     }
 
