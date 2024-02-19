@@ -381,6 +381,7 @@ class CDMNonlocal(NonlocalInterface):
         q_fields_local: dict[str, df.fem.Function],
         q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
+        density_0: float | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
 
@@ -407,12 +408,21 @@ class CDMNonlocal(NonlocalInterface):
         else:
             g = 1.0
 
-        f_int_ufl = (
-            g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
-            + fields[Q_nonlocal] * test_function
-        ) * quadrature_rule.dx
+        if density_0 is not None:
+            frac_det_F = q_fields["density"] * (1.0 / density_0)
+        else:
+            frac_det_F = 1.0
 
-        f_ext_ufl = q_fields[Q_local] * test_function * quadrature_rule.dx
+        f_int_ufl = (
+            frac_det_F
+            * (
+                g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
+                + fields[Q_nonlocal] * test_function
+            )
+            * quadrature_rule.dx
+        )
+
+        f_ext_ufl = frac_det_F * q_fields[Q_local] * test_function * quadrature_rule.dx
 
         f_ufl = -f_int_ufl + f_ext_ufl
 
@@ -680,6 +690,7 @@ class CDMNonlocalMechanics(CDMSolver):
             mechanics_solver.q_fields,
             mechanics_solver.model.input[Q_nonlocal],
             Q_local_damage=Q_local_damage,
+            density_0=parameters["rho"],
         )
 
         # add all fields from the solver to this class for easier postprocessing
