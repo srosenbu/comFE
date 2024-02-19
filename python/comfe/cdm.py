@@ -409,6 +409,7 @@ class CDMNonlocal(NonlocalInterface):
             g = 1.0
 
         if density_0 is not None:
+            q_fields["density"] = q_fields_local["density"]
             frac_det_F = q_fields["density"] * (1.0 / density_0)
         else:
             frac_det_F = 1.0
