@@ -444,7 +444,8 @@ class CDMNonlocal(NonlocalInterface):
             f_local.set(0.0)
 
         if self.fields["u"] is not None:
-            self.fields["u"].function_space.mesh.geometry.x[:] -= self.fields["u"].x.array
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, -self.fields["u"].x.array, mode="add")
+            # self.fields["u"].function_space.mesh.geometry.x[:] -= self.fields["u"].x.array
 
         df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
         self.fields["nonlocal_force"].x.scatter_reverse(ScatterMode.add)
@@ -466,7 +467,8 @@ class CDMNonlocal(NonlocalInterface):
         self.q_fields[self.Q_nonlocal].x.scatter_forward()
 
         if self.fields["u"] is not None:
-            self.fields["u"].function_space.mesh.geometry.x[:] += self.fields["u"].x.array
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, self.fields["u"].x.array, mode="add")
+            # self.fields["u"].function_space.mesh.geometry.x[:] += self.fields["u"].x.array
 
         self.t += h
 
