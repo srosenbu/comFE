@@ -410,8 +410,6 @@ class CDMNonlocal(NonlocalInterface):
 
         if displacements is not None:
             fields["u"] = displacements
-        else:
-            fields["u"] = None
 
         f_int_ufl = (
             g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
@@ -443,7 +441,7 @@ class CDMNonlocal(NonlocalInterface):
         with self.fields["nonlocal_force"].vector.localForm() as f_local:
             f_local.set(0.0)
 
-        if self.fields["u"] is not None:
+        if "u" in self.fields:
             set_mesh_coordinates(self.fields["u"].function_space.mesh, -self.fields["u"].x.array, mode="add")
             # self.fields["u"].function_space.mesh.geometry.x[:] -= self.fields["u"].x.array
 
@@ -466,7 +464,7 @@ class CDMNonlocal(NonlocalInterface):
         self.strain_evaluator(self.q_fields[self.Q_nonlocal])
         self.q_fields[self.Q_nonlocal].x.scatter_forward()
 
-        if self.fields["u"] is not None:
+        if "u" in self.fields:
             set_mesh_coordinates(self.fields["u"].function_space.mesh, self.fields["u"].x.array, mode="add")
             # self.fields["u"].function_space.mesh.geometry.x[:] += self.fields["u"].x.array
 
@@ -498,7 +496,7 @@ class ImplicitNonlocal(NonlocalInterface):
         q_fields_local: dict[str, df.fem.Function],
         q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
-        density_0: float | None = None,
+        displacements: df.fem.Function | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
 
@@ -525,25 +523,20 @@ class ImplicitNonlocal(NonlocalInterface):
         else:
             g = 1.0
 
-        if density_0 is not None:
-            q_fields["density"] = q_fields_local["density"]
-            frac_det_F = q_fields["density"] * (1.0 / density_0)
+        if displacements is not None:
+            fields["u"] = displacements
         else:
-            frac_det_F = 1.0
+            fields["u"] = None
 
         test_function = ufl.TestFunction(function_space)
         trial_function = ufl.TrialFunction(function_space)
 
-        b_form = frac_det_F * ufl.inner(test_function, q_fields[Q_local]) * quadrature_rule.dx
+        b_form = ufl.inner(test_function, q_fields[Q_local]) * quadrature_rule.dx
 
         A_form = (
-            frac_det_F
-            * (
-                ufl.inner(test_function, trial_function)
-                + g * parameters["l"] ** 2.0 * ufl.inner(ufl.grad(test_function), ufl.grad(trial_function))
-            )
-            * quadrature_rule.dx
-        )
+            ufl.inner(test_function, trial_function)
+            + g * parameters["l"] ** 2.0 * ufl.inner(ufl.grad(test_function), ufl.grad(trial_function))
+        ) * quadrature_rule.dx
 
         problem = df.fem.petsc.LinearProblem(A_form, b_form, u=fields[Q_nonlocal])
 
@@ -576,6 +569,7 @@ class ImplicitNonlocal(NonlocalInterface):
 
     def step(self, h: float) -> None:
         # old_nonlocal = self.fields[self.Q_nonlocal].vector.array.copy()
+
         self.problem.solve()
         # self.q_fields[self.Q_nonlocal_rate].vector.array[:] = (
         #    self.fields[self.Q_nonlocal].vector.array - old_nonlocal
