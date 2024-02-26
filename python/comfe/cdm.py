@@ -381,7 +381,7 @@ class CDMNonlocal(NonlocalInterface):
         q_fields_local: dict[str, df.fem.Function],
         q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
-        density_0: float | None = None,
+        displacements: df.fem.Function | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
 
@@ -408,22 +408,17 @@ class CDMNonlocal(NonlocalInterface):
         else:
             g = 1.0
 
-        if density_0 is not None:
-            q_fields["density"] = q_fields_local["density"]
-            frac_det_F = q_fields["density"] * (1.0 / density_0)
+        if displacements is not None:
+            fields["u"] = displacements
         else:
-            frac_det_F = 1.0
+            fields["u"] = None
 
         f_int_ufl = (
-            frac_det_F
-            * (
-                g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
-                + fields[Q_nonlocal] * test_function
-            )
-            * quadrature_rule.dx
-        )
+            g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
+            + fields[Q_nonlocal] * test_function
+        ) * quadrature_rule.dx
 
-        f_ext_ufl = frac_det_F * q_fields[Q_local] * test_function * quadrature_rule.dx
+        f_ext_ufl = q_fields[Q_local] * test_function * quadrature_rule.dx
 
         f_ufl = -f_int_ufl + f_ext_ufl
 
@@ -448,6 +443,9 @@ class CDMNonlocal(NonlocalInterface):
         with self.fields["nonlocal_force"].vector.localForm() as f_local:
             f_local.set(0.0)
 
+        if self.fields["u"] is not None:
+            self.fields["u"].function_space.mesh.geometry.x[:] -= self.fields["u"].x.array
+
         df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
         self.fields["nonlocal_force"].x.scatter_reverse(ScatterMode.add)
 
@@ -466,6 +464,9 @@ class CDMNonlocal(NonlocalInterface):
 
         self.strain_evaluator(self.q_fields[self.Q_nonlocal])
         self.q_fields[self.Q_nonlocal].x.scatter_forward()
+
+        if self.fields["u"] is not None:
+            self.fields["u"].function_space.mesh.geometry.x[:] += self.fields["u"].x.array
 
         self.t += h
 
@@ -693,7 +694,7 @@ class CDMNonlocalMechanics(CDMSolver):
             calculate_bulk_viscosity=calculate_bulk_viscosity,
         )
 
-        density_0 = parameters["rho"] if nonlocal_initial_config else None
+        displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None
         nonlocal_solver = nonlocal_solver(
             Q_local,
             Q_nonlocal_rate,
@@ -705,7 +706,7 @@ class CDMNonlocalMechanics(CDMSolver):
             mechanics_solver.q_fields,
             mechanics_solver.model.input[Q_nonlocal],
             Q_local_damage=Q_local_damage,
-            density_0=density_0,
+            displacements=displacements,
         )
 
         # add all fields from the solver to this class for easier postprocessing
