@@ -36,6 +36,8 @@ impl ConstitutiveModel for GradientJH23D {
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
+                LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
+                //M_OVERNONLOCAL: *parameters.get("M_OVERNONLOCAL").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
@@ -125,19 +127,22 @@ impl ConstitutiveModel for GradientJH23D {
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.RHO - 1.;
-        
+        let mut local_bulk_modulus = self.parameters.K1;
         let p_1 = {
             if mu > 0.0 {
+                local_bulk_modulus +=
+                    2.0 * self.parameters.K2 * mu + 3.0 * self.parameters.K3 * mu.powi(2);
                 self.parameters.K1 * mu
                     + self.parameters.K2 * mu.powi(2)
                     + self.parameters.K3 * mu.powi(3)
                     + input.get_scalar(Q::BulkingPressure, ip)
             } else {
-                let p_trial = self.parameters.K1*mu;
+                let p_trial = self.parameters.K1 * mu;
                 let p_damaged = -self.parameters.T * (1. - damage_1);
                 if p_trial > p_damaged {
                     p_trial
                 } else {
+                    local_bulk_modulus = 0.0;
                     p_damaged
                 }
             }
@@ -161,7 +166,9 @@ impl ConstitutiveModel for GradientJH23D {
         // Calculate bulk viscosity
         let l = input.get_scalar(Q::CellDiameter, ip);
         let tr_deps = d_eps_vol * 3.;
-        let c = (self.parameters.K1 / self.parameters.RHO).sqrt();
+        let bulk_modulus = local_bulk_modulus * self.parameters.LOCAL_SOUND_SPEED
+            + (1.0 - self.parameters.LOCAL_SOUND_SPEED) * self.parameters.K1;
+        let c = (bulk_modulus / self.parameters.RHO).sqrt();
         let q_1 = {
             if tr_deps < 0.0 {
                 l * density_1 * (1.5 * l * tr_deps.powi(2) +  c * 0.06 * tr_deps.abs())

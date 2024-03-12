@@ -26,6 +26,7 @@ pub struct JH2ConstParameters {
     pub EFMIN: f64,
     pub DMAX: f64,
     pub E_F: f64,
+    pub LOCAL_SOUND_SPEED: f64,
     //pub REDUCE_T: f64,
 }
 #[derive(Debug)]
@@ -57,6 +58,7 @@ impl ConstitutiveModel for JH23D {
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
+                LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
@@ -89,7 +91,7 @@ impl ConstitutiveModel for JH23D {
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
-        
+
         //let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
         let fracture_surface =
             (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
@@ -114,7 +116,7 @@ impl ConstitutiveModel for JH23D {
             alpha = yield_surface / s_tr_eq;
 
             if self.parameters.E_F > 0.0 {
-                let lambda_old = - self.parameters.E_F * (1. - damage_0).ln();
+                let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
                 let lambda_new = lambda_old + del_lambda;
                 damage_1 = 1. - (-lambda_new / self.parameters.E_F).exp();
             } else {
@@ -143,9 +145,11 @@ impl ConstitutiveModel for JH23D {
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.RHO - 1.;
-
+        let mut local_bulk_modulus = self.parameters.K1;
         let p_1 = {
             if mu > 0.0 {
+                local_bulk_modulus +=
+                    2.0 * self.parameters.K2 * mu + 3.0 * self.parameters.K3 * mu.powi(2);
                 self.parameters.K1 * mu
                     + self.parameters.K2 * mu.powi(2)
                     + self.parameters.K3 * mu.powi(3)
@@ -156,6 +160,7 @@ impl ConstitutiveModel for JH23D {
                 if p_trial > p_damaged {
                     p_trial
                 } else {
+                    local_bulk_modulus = 0.0;
                     p_damaged
                 }
             }
@@ -179,7 +184,9 @@ impl ConstitutiveModel for JH23D {
         // Calculate bulk viscosity
         let l = input.get_scalar(Q::CellDiameter, ip);
         let tr_deps = d_eps_vol * 3.;
-        let c = (self.parameters.K1 / self.parameters.RHO).sqrt();
+        let bulk_modulus = local_bulk_modulus * self.parameters.LOCAL_SOUND_SPEED
+            + (1.0 - self.parameters.LOCAL_SOUND_SPEED) * self.parameters.K1;
+        let c = (bulk_modulus / self.parameters.RHO).sqrt();
         let q_1 = {
             if tr_deps < 0.0 {
                 l * density_1 * (1.5 * l * tr_deps.powi(2) + c * 0.06 * tr_deps.abs())
@@ -213,15 +220,14 @@ impl ConstitutiveModel for JH23D {
         }
 
         let elastic_rate =
-            - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
-        
+            -(1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
+
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
             let deviatoric_rate = d_eps_dev - elastic_rate;
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0
-                + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
+            let e_1 = e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
@@ -229,9 +235,8 @@ impl ConstitutiveModel for JH23D {
             let p_mid = -0.5 * (p_0 + p_1);
             let deviatoric_rate = elastic_rate;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
-            let e_1 = e_0
-                + del_t / density_mid
-                    * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
+            let e_1 =
+                e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
@@ -242,7 +247,7 @@ impl ConstitutiveModel for JH23D {
         }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
             let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
-            let q_mid = - 0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
+            let q_mid = -0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
             let e_1 = e_0 + del_t / density_mid * 3. * q_mid * d_eps_vol;
             output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
         }
