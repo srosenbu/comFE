@@ -525,8 +525,6 @@ class ImplicitNonlocal(NonlocalInterface):
 
         if displacements is not None:
             fields["u"] = displacements
-        else:
-            fields["u"] = None
 
         test_function = ufl.TestFunction(function_space)
         trial_function = ufl.TrialFunction(function_space)
@@ -569,12 +567,16 @@ class ImplicitNonlocal(NonlocalInterface):
 
     def step(self, h: float) -> None:
         # old_nonlocal = self.fields[self.Q_nonlocal].vector.array.copy()
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, -self.fields["u"].x.array, mode="add")
 
         self.problem.solve()
         # self.q_fields[self.Q_nonlocal_rate].vector.array[:] = (
         #    self.fields[self.Q_nonlocal].vector.array - old_nonlocal
         # ) / h
         self.strain_evaluator(self.q_fields[self.Q_nonlocal])
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, self.fields["u"].x.array, mode="add")
         self.t += h
 
 
@@ -675,7 +677,7 @@ class CDMNonlocalMechanics(CDMSolver):
         )
         mass_nonlocal = (
             mass_nonlocal
-            if mass_nonlocal is not None or nonlocal_parameters["solver"] == "implicit"
+            if mass_nonlocal is not None or nonlocal_solver == ImplicitNonlocal
             else diagonal_mass(nonlocal_space, nonlocal_parameters["zeta"], invert=True)
         )
         mechanics_solver = mechanics_solver(
