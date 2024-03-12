@@ -503,11 +503,6 @@ def test_single_element_2d(test_case: dict, plot: str | None = None) -> None:
     p_ = np.array(p_).reshape((-1, 1))
     s_eq_ = np.array(s_eq_).reshape((-1, 1))
 
-    points = np.hstack((p_, s_eq_))
-    tree = KDTree(points)
-    distances = tree.query(test_case["points"])
-    assert np.mean(distances[0] / np.max(np.abs(test_case["points"][:, 1]))) < 0.05
-
     if plot is not None:
         import matplotlib
         import matplotlib.pyplot as plt
@@ -524,7 +519,13 @@ def test_single_element_2d(test_case: dict, plot: str | None = None) -> None:
         plt.savefig(f"{plot}.png")
         plt.clf()
 
+    points = np.hstack((p_, s_eq_))
+    tree = KDTree(points)
+    distances = tree.query(test_case["points"])
+    assert np.mean(distances[0] / np.max(np.abs(test_case["points"][:, 1]))) < 0.05
+
 
 if __name__ == "__main__":
     test_single_element_2d(case_3a, plot="jh2_case_3a")
     test_single_element_2d(case_1, plot="jh2_case_1")
+    test_single_element_2d(case_2, plot="jh2_case_2")
