@@ -8,8 +8,14 @@ use crate::jh2::JH2ConstParameters;
 use std::collections::HashMap;
 
 #[derive(Debug)]
+pub struct NonlocalParameters{
+    m_overnonlocal: f64,
+}
+
+#[derive(Debug)]
 pub struct GradientJH23D {
     parameters: JH2ConstParameters,
+    nonlocal_parameters: NonlocalParameters,
 }
 
 impl ConstitutiveModel for GradientJH23D {
@@ -39,6 +45,9 @@ impl ConstitutiveModel for GradientJH23D {
                 LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
                 //M_OVERNONLOCAL: *parameters.get("M_OVERNONLOCAL").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
+            },
+            nonlocal_parameters: NonlocalParameters {
+                m_overnonlocal: *parameters.get("M_OVERNONLOCAL").unwrap_or(&1.0),
             },
         })
     }
@@ -83,7 +92,9 @@ impl ConstitutiveModel for GradientJH23D {
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = 0.0;
         if self.parameters.E_F > 0.0 {
-            damage_1 = 1. - (-history_maximum_1 / self.parameters.E_F).exp();
+            let m = self.nonlocal_parameters.m_overnonlocal;
+            let kappa = m * history_maximum_1 + (1.0 - m) * input.get_scalar(Q::EqPlasticStrain, ip);
+            damage_1 = 1. - (-kappa / self.parameters.E_F).exp();
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }
