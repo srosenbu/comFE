@@ -44,7 +44,7 @@ impl ConstitutiveModel for GradientJH23D {
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
                 E_0: *parameters.get("E_0").unwrap_or(&0.0),
                 LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
-                HARDENING: *parameters.get("HARDENING_MODULUS").unwrap_or(&0.0),
+                HARDENING: *parameters.get("HARDENING").unwrap_or(&0.0),
                 //M_OVERNONLOCAL: *parameters.get("M_OVERNONLOCAL").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
@@ -104,9 +104,14 @@ impl ConstitutiveModel for GradientJH23D {
         output.set_scalar(Q::Damage, ip, damage_1);
 
         let hardening = self.parameters.HARDENING;
-        let hardening_factor = hardening / ((1.0 - hardening) * self.parameters.E_0)
-            * input.get_scalar(Q::EqPlasticStrain, ip)
-            + 1.0;
+        let hardening_slope = hardening / ((1.0 - hardening) * self.parameters.E_0);
+        let hardening_factor = {
+            if hardening_slope.is_nan() {
+                1.0
+            } else {
+                hardening_slope * input.get_scalar(Q::EqPlasticStrain, ip) + 1.0
+            }
+        };
         //let t_s_factor = (1.-damage_1).powf(self.parameters.REDUCE_T);
         let yield_factor = 1.0 - hardening;
         let fracture_surface =

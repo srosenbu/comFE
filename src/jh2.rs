@@ -3,6 +3,7 @@ use crate::stress_strain::{
     mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
 };
 
+use core::panic;
 use std::collections::HashMap;
 #[derive(Debug)]
 pub struct JH2ConstParameters {
@@ -83,10 +84,18 @@ impl ConstitutiveModel for JH23D {
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = damage_0;
-        
+
         let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
         let hardening = self.parameters.HARDENING;
-        let hardening_factor = hardening/((1.0-hardening) * self.parameters.E_0) * lambda_old + 1.0;
+
+        let hardening_slope = hardening / ((1.0 - hardening) * self.parameters.E_0);
+        let hardening_factor = {
+            if hardening_slope.is_nan() {
+                1.0
+            } else {
+                hardening_slope * lambda_old + 1.0
+            }
+        };
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
@@ -102,8 +111,8 @@ impl ConstitutiveModel for JH23D {
 
         //let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
         let yield_factor = 1.0 - hardening;
-        let fracture_surface =
-            yield_factor * (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+        let fracture_surface = yield_factor
+            * (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
@@ -127,7 +136,8 @@ impl ConstitutiveModel for JH23D {
             if self.parameters.E_F > 0.0 {
                 //let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
                 let lambda_new = lambda_old + del_lambda;
-                damage_1 = 1. - ((self.parameters.E_0-lambda_new).max(0.0) / self.parameters.E_F).exp();
+                damage_1 =
+                    1. - ((self.parameters.E_0 - lambda_new).max(0.0) / self.parameters.E_F).exp();
             } else {
                 damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
             }
