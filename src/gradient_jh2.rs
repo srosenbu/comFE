@@ -42,7 +42,9 @@ impl ConstitutiveModel for GradientJH23D {
                 EFMIN: *parameters.get("EFMIN").unwrap(),
                 DMAX: *parameters.get("DMAX").unwrap_or(&1.0),
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
+                E_0: *parameters.get("E_0").unwrap_or(&0.0),
                 LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
+                HARDENING_MODULUS: *parameters.get("HARDENING_MODULUS").unwrap_or(&0.0),
                 //M_OVERNONLOCAL: *parameters.get("M_OVERNONLOCAL").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
@@ -94,7 +96,7 @@ impl ConstitutiveModel for GradientJH23D {
         if self.parameters.E_F > 0.0 {
             let m = self.nonlocal_parameters.m_overnonlocal;
             let kappa = (m * history_maximum_1 + (1.0 - m) * input.get_scalar(Q::EqPlasticStrain, ip)).max(0.0);
-            damage_1 = 1. - (-kappa / self.parameters.E_F).exp();
+            damage_1 = 1. - ((self.parameters.E_0-kappa) / self.parameters.E_F).exp();
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }
