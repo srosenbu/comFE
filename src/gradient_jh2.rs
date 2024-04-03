@@ -96,7 +96,7 @@ impl ConstitutiveModel for GradientJH23D {
             let kappa = (m * history_maximum_1
                 + (1.0 - m) * input.get_scalar(Q::EqPlasticStrain, ip))
             .max(0.0);
-            damage_1 = 1. - ((self.parameters.E_0 - kappa).max(0.0) / self.parameters.E_F).exp();
+            damage_1 = (1. - ((self.parameters.E_0 - kappa) / self.parameters.E_F).exp()).max(0.0);
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }

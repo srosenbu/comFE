@@ -137,7 +137,7 @@ impl ConstitutiveModel for JH23D {
                 //let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
                 let lambda_new = lambda_old + del_lambda;
                 damage_1 =
-                    1. - ((self.parameters.E_0 - lambda_new).max(0.0) / self.parameters.E_F).exp();
+                    (1. - ((self.parameters.E_0 - lambda_new) / self.parameters.E_F).exp()).max(0.0);
             } else {
                 damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
             }
