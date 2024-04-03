@@ -28,7 +28,7 @@ pub struct JH2ConstParameters {
     pub E_F: f64,
     pub E_0: f64,
     pub LOCAL_SOUND_SPEED: f64,
-    pub HARDENING_MODULUS: f64,
+    pub HARDENING: f64,
     //pub REDUCE_T: f64,
 }
 #[derive(Debug)]
@@ -62,7 +62,7 @@ impl ConstitutiveModel for JH23D {
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
                 E_0: *parameters.get("E_0").unwrap_or(&0.0),
                 LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
-                HARDENING_MODULUS: *parameters.get("HARDENING_MODULUS").unwrap_or(&0.0),
+                HARDENING: *parameters.get("HARDENING").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
         })
@@ -83,6 +83,10 @@ impl ConstitutiveModel for JH23D {
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = damage_0;
+        
+        let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
+        let hardening = self.parameters.HARDENING;
+        let hardening_factor = hardening/((1.0-hardening) * self.parameters.E_0) * lambda_old + 1.0;
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
@@ -90,15 +94,16 @@ impl ConstitutiveModel for JH23D {
         let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
         let d_eps_eq = ((2. / 3.) * d_eps.norm_squared()).sqrt();
-        let mut alpha;
+        let mut alpha: f64;
 
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
 
         //let t_s_factor = (1.-damage_0).powf(self.parameters.REDUCE_T);
+        let yield_factor = 1.0 - hardening;
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            yield_factor * (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
@@ -107,9 +112,9 @@ impl ConstitutiveModel for JH23D {
         }
         let yield_surface = rate_factor * {
             if damage_0 == 0.0 {
-                fracture_surface
+                fracture_surface * hardening_factor
             } else {
-                fracture_surface * (1. - damage_0) + damage_0 * residual_surface
+                fracture_surface * hardening_factor * (1. - damage_0) + damage_0 * residual_surface
             }
         };
         if s_tr_eq > yield_surface {
@@ -120,9 +125,9 @@ impl ConstitutiveModel for JH23D {
             alpha = yield_surface / s_tr_eq;
 
             if self.parameters.E_F > 0.0 {
-                let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
+                //let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
                 let lambda_new = lambda_old + del_lambda;
-                damage_1 = 1. - ((self.parameters.E_0-lambda_new) / self.parameters.E_F).exp();
+                damage_1 = 1. - ((self.parameters.E_0-lambda_new).max(0.0) / self.parameters.E_F).exp();
             } else {
                 damage_1 = (damage_0 + del_lambda / e_p_f).min(self.parameters.DMAX);
             }

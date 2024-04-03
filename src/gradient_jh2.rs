@@ -8,7 +8,7 @@ use crate::jh2::JH2ConstParameters;
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub struct NonlocalParameters{
+pub struct NonlocalParameters {
     m_overnonlocal: f64,
 }
 
@@ -19,7 +19,7 @@ pub struct GradientJH23D {
 }
 
 impl ConstitutiveModel for GradientJH23D {
-    fn new(parameters: &HashMap<String, f64>) -> Option<Self>{
+    fn new(parameters: &HashMap<String, f64>) -> Option<Self> {
         Some(Self {
             parameters: JH2ConstParameters {
                 RHO: *parameters.get("RHO").unwrap(),
@@ -44,7 +44,7 @@ impl ConstitutiveModel for GradientJH23D {
                 E_F: *parameters.get("E_F").unwrap_or(&0.0),
                 E_0: *parameters.get("E_0").unwrap_or(&0.0),
                 LOCAL_SOUND_SPEED: *parameters.get("LOCAL_SOUND_SPEED").unwrap_or(&0.0),
-                HARDENING_MODULUS: *parameters.get("HARDENING_MODULUS").unwrap_or(&0.0),
+                HARDENING: *parameters.get("HARDENING_MODULUS").unwrap_or(&0.0),
                 //M_OVERNONLOCAL: *parameters.get("M_OVERNONLOCAL").unwrap_or(&0.0),
                 //REDUCE_T: *parameters.get("REDUCE_T").unwrap_or(&0.0),
             },
@@ -62,7 +62,7 @@ impl ConstitutiveModel for GradientJH23D {
         let d_eps = mandel_rate_from_velocity_gradient(&velocity_gradient);
         let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
         d_eps_vol *= -1.0;
-        
+
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
         //let del_lambda_nonlocal = del_t * input.get_scalar(Q::EqNonlocalPlasticStrainRate, ip).max(0.0);
         let nonlocal_plastic_strain = input.get_scalar(Q::EqNonlocalPlasticStrain, ip);
@@ -73,11 +73,10 @@ impl ConstitutiveModel for GradientJH23D {
         output.set_scalar(Q::HistoryMaximum, ip, history_maximum_1);
 
         let mut del_lambda = 0.0;
-        
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
-        
+
         let s_tr = s_0 + 2. * self.parameters.SHEAR_MODULUS * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
         let d_eps_eq = ((2. / 3.) * d_eps.norm_squared()).sqrt();
@@ -86,26 +85,32 @@ impl ConstitutiveModel for GradientJH23D {
         let p_s = p_0 / self.parameters.PHEL;
         let t_s = self.parameters.T / self.parameters.PHEL;
         let mut rate_factor = 1.;
-        
-        
-        let e_p_f = (self.parameters.D1 * (p_s + t_s).powf(self.parameters.D2))
-            .max(self.parameters.EFMIN);
+
+        let e_p_f =
+            (self.parameters.D1 * (p_s + t_s).powf(self.parameters.D2)).max(self.parameters.EFMIN);
 
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = 0.0;
         if self.parameters.E_F > 0.0 {
             let m = self.nonlocal_parameters.m_overnonlocal;
-            let kappa = (m * history_maximum_1 + (1.0 - m) * input.get_scalar(Q::EqPlasticStrain, ip)).max(0.0);
-            damage_1 = 1. - ((self.parameters.E_0-kappa) / self.parameters.E_F).exp();
+            let kappa = (m * history_maximum_1
+                + (1.0 - m) * input.get_scalar(Q::EqPlasticStrain, ip))
+            .max(0.0);
+            damage_1 = 1. - ((self.parameters.E_0 - kappa).max(0.0) / self.parameters.E_F).exp();
         } else {
             damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         }
         //let damage_1 = (damage_0 + del_lambda_nonlocal / e_p_f).min(self.parameters.DMAX);
         output.set_scalar(Q::Damage, ip, damage_1);
-        
+
+        let hardening = self.parameters.HARDENING;
+        let hardening_factor = hardening / ((1.0 - hardening) * self.parameters.E_0)
+            * input.get_scalar(Q::EqPlasticStrain, ip)
+            + 1.0;
         //let t_s_factor = (1.-damage_1).powf(self.parameters.REDUCE_T);
+        let yield_factor = 1.0 - hardening;
         let fracture_surface =
-            (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
+            yield_factor * (self.parameters.A * (p_s + t_s).powf(self.parameters.N) * self.parameters.SIGMAHEL)
                 .max(0.0);
         let residual_surface =
             (self.parameters.B * (p_s).powf(self.parameters.M) * self.parameters.SIGMAHEL).max(0.0);
@@ -114,9 +119,9 @@ impl ConstitutiveModel for GradientJH23D {
         }
         let yield_surface = rate_factor * {
             if damage_0 == 0.0 {
-                fracture_surface
+                fracture_surface * hardening_factor
             } else {
-                fracture_surface * (1. - damage_1) + damage_1 * residual_surface
+                fracture_surface * hardening_factor * (1. - damage_1) + damage_1 * residual_surface
             }
         };
         if s_tr_eq > yield_surface {
@@ -125,8 +130,12 @@ impl ConstitutiveModel for GradientJH23D {
         } else {
             alpha = 1.0;
         }
-        
-        output.set_scalar(Q::EqPlasticStrain, ip, input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda);
+
+        output.set_scalar(
+            Q::EqPlasticStrain,
+            ip,
+            input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda,
+        );
 
         // /***********************************************************************
         //  * UPDATE DENSITY
@@ -184,7 +193,7 @@ impl ConstitutiveModel for GradientJH23D {
         let c = (bulk_modulus / self.parameters.RHO).sqrt();
         let q_1 = {
             if tr_deps < 0.0 {
-                l * density_1 * (1.5 * l * tr_deps.powi(2) +  c * 0.06 * tr_deps.abs())
+                l * density_1 * (1.5 * l * tr_deps.powi(2) + c * 0.06 * tr_deps.abs())
             } else {
                 0.0
             }
@@ -195,7 +204,7 @@ impl ConstitutiveModel for GradientJH23D {
         //  * Combine deviatoric and volumetric stresses
         //  **********************************************************************/
         let s_1 = s_tr * alpha;
-        let sigma_1 = s_1 - MANDEL_IDENTITY * (p_1+q_1);
+        let sigma_1 = s_1 - MANDEL_IDENTITY * (p_1 + q_1);
         output.set_vector(Q::MandelStress, ip, sigma_1);
 
         // ***********************************************************************
@@ -214,39 +223,39 @@ impl ConstitutiveModel for GradientJH23D {
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-        
+
         let elastic_rate =
-            - (1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
-        
+            -(1. - alpha) / (2. * self.parameters.SHEAR_MODULUS * del_t) * s_0 + alpha * d_eps_dev;
+
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
             let deviatoric_rate = d_eps_dev - elastic_rate;
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate));
+            let e_1 = e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = - 0.5 * (p_0 + p_1); 
+            let p_mid = -0.5 * (p_0 + p_1);
             let deviatoric_rate = elastic_rate;
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
-            let e_1 = e_0 + del_t/density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
+            let e_1 =
+                e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
-            let q_mid = - 0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
+            let q_mid = -0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
             let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
-            let e_1 = e_0 + del_t/density_mid * 3.* d_eps_vol * q_mid;
+            let e_1 = e_0 + del_t / density_mid * 3. * d_eps_vol * q_mid;
             output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
-            let e_1 = e_0 + del_t/density_mid * sigma_mid.dot(&d_eps);
+            let e_1 = e_0 + del_t / density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
-
     }
 
     /// Returns the physical quantities that are required as input for the
@@ -276,12 +285,10 @@ impl ConstitutiveModel for GradientJH23D {
 
     /// Returns the physical quantities that are needed as output, but are not
     /// necessarily needed in oredr to calculate the constitutive model. An example is
-    /// the consistent tangent which is not needed for the calculation of the stresses 
+    /// the consistent tangent which is not needed for the calculation of the stresses
     /// and is therefore purely an output quantity.
     fn define_output(&self) -> HashMap<Q, QDim> {
-        HashMap::from([
-            (Q::MandelStress, QDim::Vector(6)),
-        ])
+        HashMap::from([(Q::MandelStress, QDim::Vector(6))])
     }
 
     /// Returns the physical quantities that are optional output of the constitutive
