@@ -85,7 +85,7 @@ impl ConstitutiveModel for JH23D {
         let damage_0 = input.get_scalar(Q::Damage, ip);
         let mut damage_1 = damage_0;
 
-        let lambda_old = -self.parameters.E_F * (1. - damage_0).ln();
+        let lambda_old = -self.parameters.E_F * (1. - damage_0).ln() + self.parameters.E_0;
         let hardening = self.parameters.HARDENING;
 
         let hardening_slope = hardening / ((1.0 - hardening) * self.parameters.E_0);
