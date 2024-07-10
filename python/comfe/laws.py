@@ -4,7 +4,7 @@ import dolfinx as df
 import numpy as np
 from pydantic import BaseModel
 
-from .comfe import PyGradientJH23D, PyJH23D, PyLinearElastic3D, PyLinElas3D
+from .comfe import PyGradientJH23D, PyHypoelasticity3D, PyJH23D, PyLinearElastic3D, PyLinElas3D
 from .helpers import QuadratureRule
 
 __all__ = [
@@ -15,8 +15,9 @@ __all__ = [
     "PyJH23D",
     "PyGradientJH23D",
     "PyLinearElastic3D",
+    "PyHypoelasticity3D",
 ]
-RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D
+RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D | PyHypoelasticity3D
 
 
 class QuadratureModel(ABC):

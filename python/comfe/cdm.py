@@ -9,7 +9,7 @@ from dolfinx.cpp.la import ScatterMode
 from petsc4py import PETSc
 from pydantic import BaseModel
 
-from .comfe import jaumann_rotation  # , jaumann_rotation_expensive
+from .comfe import jaumann_rotation, jaumann_rotation_expensive
 from .helpers import LogMixin, QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
 from .laws import ConstitutiveModel, RustConstitutiveModel
 
@@ -153,7 +153,7 @@ class CDM3D(CDMSolver):
         f_int_form = df.fem.form(f_int_ufl)
         try:
             L_evaluator = QuadratureEvaluator(
-                self._as_3d_tensor(ufl.nabla_grad(v)),
+                self._as_3d_tensor(ufl.grad(v)),
                 function_space.mesh,
                 quadrature_rule,
             )
