@@ -7,6 +7,7 @@ use crate::jh2::JH23D;
 use crate::generic_jh2::GenericJH23D;
 use crate::gradient_jh2::GradientJH23D;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
+use crate::hypoelasticity::Hypoelasticity3D;
 //use crate::stress_strain;
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
@@ -19,6 +20,7 @@ pub mod jh2;
 //pub mod jh_concrete;
 pub mod generic_jh2;
 pub mod gradient_jh2;
+pub mod hypoelasticity;
 pub mod smallstrain;
 pub mod stress_strain;
 
@@ -398,6 +400,7 @@ fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     impl_constitutive_model!(PyJH23D, JH23D, m);
     impl_constitutive_model!(PyGradientJH23D, GradientJH23D, m);
     impl_constitutive_model!(PyLinElas3D, LinearElastic3D, m);
+    impl_constitutive_model!(PyHypoelasticity3D, Hypoelasticity3D, m);
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
     Ok(())
