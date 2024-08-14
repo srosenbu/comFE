@@ -1,0 +1,14 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: comFE
+message: Please cite this software using these metadata.
+type: software
+authors:
+  - given-names: Sjard Mathis
+    family-names: Rosenbusch
+    orcid: 'https://orcid.org/0009-0006-4444-2494'
+repository-code: 'https://github.com/srosenbu/comFE'
+abstract: Constitutive models for FEniCSx written in Rust.
+license: LGPL-2.1
