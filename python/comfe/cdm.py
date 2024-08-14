@@ -361,7 +361,7 @@ class CDMNonlocal(NonlocalInterface):
     M: df.fem.Function
     # fields: dict[str, df.fem.Function]
     # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
-    rate_evaluator: QuadratureEvaluator
+    strain_evaluator: QuadratureEvaluator
     parameters: dict[str, float]
     form: df.fem.FormMetaClass
     t: float
@@ -379,17 +379,17 @@ class CDMNonlocal(NonlocalInterface):
         parameters: dict[str, float],
         quadrature_rule: QuadratureRule,
         q_fields_local: dict[str, df.fem.Function],
-        q_field_nonlocal_rate: df.fem.Function,
+        q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
+        displacements: df.fem.Function | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
 
         if Q_nonlocal_rate[-4:] != "rate":
             raise ValueError("Q_nonlocal_rate must be some rate for CDM, you provided " + Q_nonlocal_rate)
 
-        q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
-
         Q_nonlocal = Q_nonlocal_rate[:-5]
+        q_fields[Q_nonlocal] = q_field_nonlocal
 
         fields = {
             Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
@@ -408,6 +408,9 @@ class CDMNonlocal(NonlocalInterface):
         else:
             g = 1.0
 
+        if displacements is not None:
+            fields["u"] = displacements
+
         f_int_ufl = (
             g * parameters["l"] ** 2 * ufl.inner(ufl.grad(fields[Q_nonlocal]), ufl.grad(test_function))
             + fields[Q_nonlocal] * test_function
@@ -419,7 +422,7 @@ class CDMNonlocal(NonlocalInterface):
 
         f_form = df.fem.form(f_ufl)
 
-        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal_rate], function_space.mesh, quadrature_rule)
+        strain_evaluator = QuadratureEvaluator(fields[Q_nonlocal], function_space.mesh, quadrature_rule)
         super().__init__(
             Q_local=Q_local,
             Q_nonlocal=Q_nonlocal,
@@ -431,12 +434,16 @@ class CDMNonlocal(NonlocalInterface):
             q_fields=q_fields,
             fields=fields,
             form=f_form,
-            rate_evaluator=rate_evaluator,
+            strain_evaluator=strain_evaluator,
         )
 
     def step(self, h: float) -> None:
         with self.fields["nonlocal_force"].vector.localForm() as f_local:
             f_local.set(0.0)
+
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, -self.fields["u"].x.array, mode="add")
+            # self.fields["u"].function_space.mesh.geometry.x[:] -= self.fields["u"].x.array
 
         df.fem.petsc.assemble_vector(self.fields["nonlocal_force"].vector, self.form)
         self.fields["nonlocal_force"].x.scatter_reverse(ScatterMode.add)
@@ -454,8 +461,12 @@ class CDMNonlocal(NonlocalInterface):
         self.fields[self.Q_nonlocal].vector.array[:] += h * self.fields[self.Q_nonlocal_rate].vector.array
         self.fields[self.Q_nonlocal].x.scatter_forward()
 
-        self.rate_evaluator(self.q_fields[self.Q_nonlocal_rate])
-        self.q_fields[self.Q_nonlocal_rate].x.scatter_forward()
+        self.strain_evaluator(self.q_fields[self.Q_nonlocal])
+        self.q_fields[self.Q_nonlocal].x.scatter_forward()
+
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, self.fields["u"].x.array, mode="add")
+            # self.fields["u"].function_space.mesh.geometry.x[:] += self.fields["u"].x.array
 
         self.t += h
 
@@ -464,7 +475,7 @@ class ImplicitNonlocal(NonlocalInterface):
     # M: df.fem.Function
     # fields: dict[str, df.fem.Function]
     # q_fields: dict[str, df.fem.Function | ufl.core.expr.Expr]
-    rate_evaluator: QuadratureEvaluator
+    strain_evaluator: QuadratureEvaluator
     parameters: dict[str, float]
     # form: df.fem.FormMetaClass
     problem: df.fem.petsc.LinearProblem
@@ -483,20 +494,22 @@ class ImplicitNonlocal(NonlocalInterface):
         parameters: dict[str, float],
         quadrature_rule: QuadratureRule,
         q_fields_local: dict[str, df.fem.Function],
-        q_field_nonlocal_rate: df.fem.Function,
+        q_field_nonlocal: df.fem.Function,
         Q_local_damage: str | None = None,
+        displacements: df.fem.Function | None = None,
     ):
         q_fields = {Q_local: q_fields_local[Q_local]}
 
         if Q_nonlocal_rate[-4:] != "rate":
             raise ValueError("Q_nonlocal_rate must be some rate for CDM, you provided " + Q_nonlocal_rate)
 
-        q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
+        # q_fields[Q_nonlocal_rate] = q_field_nonlocal_rate
 
         Q_nonlocal = Q_nonlocal_rate[:-5]
+        q_fields[Q_nonlocal] = q_field_nonlocal
 
         fields = {
-            Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
+            # Q_nonlocal_rate: df.fem.Function(function_space, name=Q_nonlocal_rate),
             Q_nonlocal: df.fem.Function(function_space, name=Q_nonlocal),
             "nonlocal_force": df.fem.Function(function_space, name="nonlocal_force"),
         }
@@ -509,6 +522,9 @@ class ImplicitNonlocal(NonlocalInterface):
             q_fields["interaction"] = g
         else:
             g = 1.0
+
+        if displacements is not None:
+            fields["u"] = displacements
 
         test_function = ufl.TestFunction(function_space)
         trial_function = ufl.TrialFunction(function_space)
@@ -533,7 +549,7 @@ class ImplicitNonlocal(NonlocalInterface):
 
         # f_form = df.fem.form(f_ufl)
 
-        rate_evaluator = QuadratureEvaluator(fields[Q_nonlocal_rate], function_space.mesh, quadrature_rule)
+        strain_evaluator = QuadratureEvaluator(fields[Q_nonlocal], function_space.mesh, quadrature_rule)
         super().__init__(
             Q_local=Q_local,
             Q_nonlocal=Q_nonlocal,
@@ -545,17 +561,22 @@ class ImplicitNonlocal(NonlocalInterface):
             q_fields=q_fields,
             fields=fields,
             # form=f_form,
-            rate_evaluator=rate_evaluator,
+            strain_evaluator=strain_evaluator,
             problem=problem,
         )
 
     def step(self, h: float) -> None:
-        old_nonlocal = self.fields[self.Q_nonlocal].vector.array.copy()
+        # old_nonlocal = self.fields[self.Q_nonlocal].vector.array.copy()
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, -self.fields["u"].x.array, mode="add")
+
         self.problem.solve()
-        self.q_fields[self.Q_nonlocal_rate].vector.array[:] = (
-            self.fields[self.Q_nonlocal].vector.array - old_nonlocal
-        ) / h
-        self.rate_evaluator(self.q_fields[self.Q_nonlocal_rate])
+        # self.q_fields[self.Q_nonlocal_rate].vector.array[:] = (
+        #    self.fields[self.Q_nonlocal].vector.array - old_nonlocal
+        # ) / h
+        self.strain_evaluator(self.q_fields[self.Q_nonlocal])
+        if "u" in self.fields:
+            set_mesh_coordinates(self.fields["u"].function_space.mesh, self.fields["u"].x.array, mode="add")
         self.t += h
 
 
@@ -647,6 +668,7 @@ class CDMNonlocalMechanics(CDMSolver):
         mass_mechanics: df.fem.Function | None = None,
         mass_nonlocal: df.fem.Function | None = None,
         calculate_bulk_viscosity: bool = False,
+        nonlocal_initial_config: bool = True,
     ) -> None:
         mass_mechanics = (
             mass_mechanics
@@ -655,7 +677,7 @@ class CDMNonlocalMechanics(CDMSolver):
         )
         mass_nonlocal = (
             mass_nonlocal
-            if mass_nonlocal is not None or nonlocal_parameters["solver"] == "implicit"
+            if mass_nonlocal is not None or nonlocal_solver == ImplicitNonlocal
             else diagonal_mass(nonlocal_space, nonlocal_parameters["zeta"], invert=True)
         )
         mechanics_solver = mechanics_solver(
@@ -670,6 +692,7 @@ class CDMNonlocalMechanics(CDMSolver):
             calculate_bulk_viscosity=calculate_bulk_viscosity,
         )
 
+        displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None
         nonlocal_solver = nonlocal_solver(
             Q_local,
             Q_nonlocal_rate,
@@ -679,8 +702,9 @@ class CDMNonlocalMechanics(CDMSolver):
             nonlocal_parameters,
             quadrature_rule,
             mechanics_solver.q_fields,
-            mechanics_solver.model.input[Q_nonlocal_rate],
+            mechanics_solver.model.input[Q_nonlocal],
             Q_local_damage=Q_local_damage,
+            displacements=displacements,
         )
 
         # add all fields from the solver to this class for easier postprocessing
