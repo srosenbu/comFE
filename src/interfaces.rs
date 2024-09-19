@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use nalgebra::{SMatrix, SVector, SVectorView};
 
 use crate::consts::*;
+use crate::utils::{slice_as_chunks, slice_as_chunks_mut};
 
 pub type ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
@@ -33,15 +34,6 @@ pub trait ConstitutiveModel<
     const PARAMETERS: usize,
 >
 {
-    //fn check_dimensions() -> bool {
-    //    let check = STRESS_STRAIN.pow(2) == TANGENT;
-    //    let history_dim = Self::history().iter().fold(0, |acc, (name, dim, size)| {
-    //        acc + size
-    //    });
-    //    let check = check && history_dim == HISTORY;
-    //    check
-    //}
-
     fn evaluate(
         time: f64,
         del_time: f64,
@@ -53,8 +45,7 @@ pub trait ConstitutiveModel<
     );
 
     fn parameters() -> [String; PARAMETERS];
-    
-    fn history() -> [(String, Dim, usize)];
+
 }
 
 pub fn evaluate_model<
@@ -79,10 +70,8 @@ pub fn evaluate_model<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = match tangent {
-        Some(t) => t.len() / STRESS_STRAIN.pow(2),
-        None => 0
-    };
+    let tangent_len = tangent.map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
+
 
     assert!(
         stress_len == strain_len
@@ -90,46 +79,25 @@ pub fn evaluate_model<
             && (stress_len == tangent_len || tangent.is_none())
     );
     // This unsafe code is ok because the slices are guaranteed to be the correct length
-    let stress_ = unsafe {
-        std::slice::from_raw_parts_mut(
-            stress.as_mut_ptr() as *mut [f64; STRESS_STRAIN],
-            stress_len,
-        )
-    };
-    let strain_ = unsafe {
-        std::slice::from_raw_parts(
-            del_strain.as_ptr() as *const [f64; STRESS_STRAIN],
-            strain_len,
-        )
-    };
-    let history_ = unsafe {
-        std::slice::from_raw_parts_mut(
-            history.as_mut_ptr() as *mut [f64; HISTORY],
-            history_len,
-        )
-    };
-    let tangent_ = {
-    match tangent {
-        Some(t) => unsafe {
-            Some(std::slice::from_raw_parts_mut(
-                t.as_mut_ptr() as *mut [f64; TANGENT],
-                tangent_len,
-            ))
-        },
-        None => None
-    }
-    };    
-    
+    let stress_ = slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap();
+    let del_strain_ = slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap();
+    let history_ = slice_as_chunks_mut::<f64, HISTORY>(history).unwrap();
+    let tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
+
     for i in 0..stress_len {
         let mut stress_chunk = stress_[i];
-        let del_strain_chunk = strain_[i];
+        let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk:Option<&mut [f64; TANGENT]> = match tangent_ {
-            Some(t) => Some(&mut t[i]),
-            None => None
-        };
-        
-        MODEL::evaluate(time, del_time, &del_strain_chunk, &mut stress_chunk, tangent_chunk, &mut history_chunk, &parameters);
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.map(|t| &mut t[i]); 
+        MODEL::evaluate(
+            time,
+            del_time,
+            &del_strain_chunk,
+            &mut stress_chunk,
+            tangent_chunk,
+            &mut history_chunk,
+            &parameters,
+        );
     }
 }
 pub fn evaluate_model_fn<
@@ -154,10 +122,8 @@ pub fn evaluate_model_fn<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = match tangent {
-        Some(t) => t.len() / STRESS_STRAIN.pow(2),
-        None => 0
-    };
+    let tangent_len = tangent.map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
+
 
     assert!(
         stress_len == strain_len
@@ -165,45 +131,25 @@ pub fn evaluate_model_fn<
             && (stress_len == tangent_len || tangent.is_none())
     );
     // This unsafe code is ok because the slices are guaranteed to be the correct length
-    let stress_ = unsafe {
-        std::slice::from_raw_parts_mut(
-            stress.as_mut_ptr() as *mut [f64; STRESS_STRAIN],
-            stress_len,
-        )
-    };
-    let strain_ = unsafe {
-        std::slice::from_raw_parts(
-            del_strain.as_ptr() as *const [f64; STRESS_STRAIN],
-            strain_len,
-        )
-    };
-    let history_ = unsafe {
-        std::slice::from_raw_parts_mut(
-            history.as_mut_ptr() as *mut [f64; HISTORY],
-            history_len,
-        )
-    };
-    let tangent_ = {
-    match tangent {
-        Some(t) => unsafe {
-            Some(std::slice::from_raw_parts_mut(
-                t.as_mut_ptr() as *mut [f64; TANGENT],
-                tangent_len,
-            ))
-        },
-        None => None
-    }
-    };    
-    
+    let stress_ = slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap();
+    let del_strain_ = slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap();
+    let history_ = slice_as_chunks_mut::<f64, HISTORY>(history).unwrap();
+    let tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
+
     for i in 0..stress_len {
         let mut stress_chunk = stress_[i];
-        let del_strain_chunk = strain_[i];
+        let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk:Option<&mut [f64; TANGENT]> = match tangent_ {
-            Some(t) => Some(&mut t[i]),
-            None => None
-        };
-        
-        model(time, del_time, &del_strain_chunk, &mut stress_chunk, tangent_chunk, &mut history_chunk, &parameters);
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.map(|t| &mut t[i]); 
+
+        model(
+            time,
+            del_time,
+            &del_strain_chunk,
+            &mut stress_chunk,
+            tangent_chunk,
+            &mut history_chunk,
+            &parameters,
+        );
     }
 }
