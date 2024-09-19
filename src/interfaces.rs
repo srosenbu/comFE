@@ -70,7 +70,7 @@ pub fn evaluate_model<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = tangent.map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
+    let tangent_len = tangent.as_ref().map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
 
 
     assert!(
@@ -82,13 +82,13 @@ pub fn evaluate_model<
     let stress_ = slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap();
     let del_strain_ = slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap();
     let history_ = slice_as_chunks_mut::<f64, HISTORY>(history).unwrap();
-    let tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
+    let mut tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
 
     for i in 0..stress_len {
         let mut stress_chunk = stress_[i];
         let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.map(|t| &mut t[i]); 
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]); 
         MODEL::evaluate(
             time,
             del_time,
@@ -122,7 +122,7 @@ pub fn evaluate_model_fn<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = tangent.map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
+    let tangent_len = tangent.as_ref().map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
 
 
     assert!(
@@ -134,13 +134,13 @@ pub fn evaluate_model_fn<
     let stress_ = slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap();
     let del_strain_ = slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap();
     let history_ = slice_as_chunks_mut::<f64, HISTORY>(history).unwrap();
-    let tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
+    let mut tangent_ = tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap());
 
     for i in 0..stress_len {
         let mut stress_chunk = stress_[i];
         let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.map(|t| &mut t[i]); 
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]); 
 
         model(
             time,
