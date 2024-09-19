@@ -18,7 +18,14 @@ pub type ConstitutiveModelFn<
     &mut [f64; HISTORY],
     &[f64; PARAMETERS],
 );
-
+#[repr(C)]
+pub enum Dim {
+    Scalar,
+    Vector,
+    Matrix,
+    RotatableVector,
+    RotatableMatrix,
+}
 pub trait ConstitutiveModel<
     const STRESS_STRAIN: usize,
     const TANGENT: usize,
@@ -26,6 +33,15 @@ pub trait ConstitutiveModel<
     const PARAMETERS: usize,
 >
 {
+    fn check_dimensions() -> bool {
+        let check = STRESS_STRAIN.pow(2) == TANGENT;
+        let history_dim = Self::history().iter().fold(0, |acc, (name, dim, size)| {
+            acc + size
+        });
+        let check = check && history_dim == HISTORY;
+        check
+    }
+
     fn evaluate(
         time: f64,
         del_time: f64,
@@ -36,5 +52,7 @@ pub trait ConstitutiveModel<
         parameters: &[f64; PARAMETERS],
     );
 
-    fn parameters() -> HashMap<String, (usize,usize)>;
+    fn parameters() -> [String; PARAMETERS];
+    
+    fn history() -> [(String, Dim, usize)];
 }

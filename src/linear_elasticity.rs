@@ -31,11 +31,8 @@ impl ConstitutiveModel<6, 36, 0, 2> for LinearElasticity3D {
             tangent.copy_from_slice(tangent_mat.as_slice());
         }
     }
-    fn parameters() -> std::collections::HashMap<String, (usize, usize)> {
-        let mut map = HashMap::new();
-        map.insert("mu".to_string(), (0, 1));
-        map.insert("lambda".to_string(), (1, 1));
-        map
+    fn parameters() -> [String; 2] {
+        ["mu".to_string(), "lambda".to_string()]
     }
 }
 
