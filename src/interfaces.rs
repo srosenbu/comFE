@@ -45,7 +45,6 @@ pub trait ConstitutiveModel<
     );
 
     fn parameters() -> [String; PARAMETERS];
-
 }
 
 pub fn evaluate_model<
@@ -53,7 +52,7 @@ pub fn evaluate_model<
     const TANGENT: usize,
     const HISTORY: usize,
     const PARAMETERS: usize,
-    MODEL: ConstitutiveModel<STRESS_STRAIN, TANGENT, HISTORY, PARAMETERS>,
+    MODEL,
 >(
     time: f64,
     del_time: f64,
@@ -62,7 +61,9 @@ pub fn evaluate_model<
     tangent: Option<&mut [f64]>,
     history: &mut [f64],
     parameters: &[f64],
-) {
+) where
+    MODEL: ConstitutiveModel<STRESS_STRAIN, TANGENT, HISTORY, PARAMETERS>,
+{
     let parameters: [f64; PARAMETERS] = parameters
         .try_into()
         .expect("Slice length does not match array length");
@@ -70,8 +71,10 @@ pub fn evaluate_model<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = tangent.as_ref().map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
-
+    let tangent_len = tangent
+        .as_ref()
+        .map(|t| t.len() / STRESS_STRAIN.pow(2))
+        .unwrap_or(0);
 
     assert!(
         stress_len == strain_len
@@ -88,7 +91,7 @@ pub fn evaluate_model<
         let mut stress_chunk = stress_[i];
         let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]); 
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]);
         MODEL::evaluate(
             time,
             del_time,
@@ -122,8 +125,10 @@ pub fn evaluate_model_fn<
     let stress_len = stress.len() / STRESS_STRAIN;
     let strain_len = del_strain.len() / STRESS_STRAIN;
     let history_len = history.len() / HISTORY;
-    let tangent_len = tangent.as_ref().map(|t| t.len() / STRESS_STRAIN.pow(2)).unwrap_or(0);
-
+    let tangent_len = tangent
+        .as_ref()
+        .map(|t| t.len() / STRESS_STRAIN.pow(2))
+        .unwrap_or(0);
 
     assert!(
         stress_len == strain_len
@@ -140,7 +145,7 @@ pub fn evaluate_model_fn<
         let mut stress_chunk = stress_[i];
         let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]); 
+        let mut tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]);
 
         model(
             time,

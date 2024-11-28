@@ -1,0 +1,17 @@
+[package]
+name = "py-comfe"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "comfe"
+crate-type = ["cdylib"]
+
+[dependencies]
+numpy = {version = "0.19.0", features=["nalgebra"]}
+nalgebra = "0.32.2"
+pyo3 = "0.19.0"
+strum = "0.25"
+strum_macros = "0.25"
+simba = "0.8.1"
