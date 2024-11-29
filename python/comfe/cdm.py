@@ -127,8 +127,8 @@ class CDM3D(CDMSolver):
         cells = [] if cells is None else cells
         for cell_array in cells:
             number_of_ips = quadrature_rule.weights.size
-            ips_array = [cell_array * number_of_ips + i for i in range(number_of_ips)]
-            ips.append(np.concatenate(ips_array, dtype=np.uint64, axis=None))
+            ips_array = [cell_array.astype(np.uint64) * number_of_ips + i for i in range(number_of_ips)]
+            ips.append(np.concatenate(ips_array, axis=None))
 
         model = ConstitutiveModel(
             rust_model,
