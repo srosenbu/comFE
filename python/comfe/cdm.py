@@ -709,6 +709,7 @@ class CDMNonlocalMechanics(CDMSolver):
             quadrature_rule,
             additional_output,
             calculate_bulk_viscosity=calculate_bulk_viscosity,
+            cells=cells,
         )
 
         displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None
