@@ -66,14 +66,14 @@ class ConstitutiveModel(BaseModel):
         output = {key: value.vector.array for key, value in self.output.items()}
         if len(self.rs_object) > 1:
             for model, ips in zip(self.rs_object, self.ips):
-                model.evaluate_some(del_t, ips, input, output)
+                model.evaluate_some(del_t, input, output, ips)
         else:
             self.rs_object[0].evaluate(del_t, input, output)
 
     def evaluate_some(self, del_t=1.0) -> None:
         input = {key: value.vector.array for key, value in self.input.items()}
         output = {key: value.vector.array for key, value in self.output.items()}
-        self.rs_object.evaluate_some(del_t, self.ips, input, output)
+        self.rs_object.evaluate_some(del_t, input, output, self.ips)
 
     def update(self) -> None:
         """
