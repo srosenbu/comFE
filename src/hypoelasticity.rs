@@ -68,4 +68,11 @@ impl ConstitutiveModel for Hypoelasticity3D {
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([])
     }
+    
+    fn parameters(&self)->HashMap<String, f64> {
+        HashMap::from([
+            ("mu".to_string(), self.mu),
+            ("lambda".to_string(), self.lambda),
+        ])
+    }
 }

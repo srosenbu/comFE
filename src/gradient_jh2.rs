@@ -315,4 +315,35 @@ impl ConstitutiveModel for GradientJH23D {
             (Q::InternalHeatingEnergy, QDim::Scalar),
         ])
     }
+    
+    fn parameters(&self)->HashMap<String, f64> {
+        HashMap::from(
+            [
+                ("RHO".to_string(), self.parameters.RHO),
+                ("SHEAR_MODULUS".to_string(), self.parameters.SHEAR_MODULUS),
+                ("A".to_string(), self.parameters.A),
+                ("B".to_string(), self.parameters.B),
+                ("C".to_string(), self.parameters.C),
+                ("M".to_string(), self.parameters.M),
+                ("N".to_string(), self.parameters.N),
+                ("EPS0".to_string(), self.parameters.EPS0),
+                ("T".to_string(), self.parameters.T),
+                ("SIGMAHEL".to_string(), self.parameters.SIGMAHEL),
+                ("PHEL".to_string(), self.parameters.PHEL),
+                ("D1".to_string(), self.parameters.D1),
+                ("D2".to_string(), self.parameters.D2),
+                ("K1".to_string(), self.parameters.K1),
+                ("K2".to_string(), self.parameters.K2),
+                ("K3".to_string(), self.parameters.K3),
+                ("BETA".to_string(), self.parameters.BETA),
+                ("EFMIN".to_string(), self.parameters.EFMIN),
+                ("DMAX".to_string(), self.parameters.DMAX),
+                ("E_F".to_string(), self.parameters.E_F),
+                ("E_0".to_string(), self.parameters.E_0),
+                ("LOCAL_SOUND_SPEED".to_string(), self.parameters.LOCAL_SOUND_SPEED),
+                ("HARDENING".to_string(), self.parameters.HARDENING),
+                ("M_OVERNONLOCAL".to_string(), self.nonlocal_parameters.m_overnonlocal),
+            ]
+        )
+    }
 }

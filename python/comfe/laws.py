@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from functools import reduce
 
 import dolfinx as df
 import numpy as np
@@ -35,10 +36,10 @@ class QuadratureModel(ABC):
 
 
 class ConstitutiveModel(BaseModel):
-    rs_object: RustConstitutiveModel
+    rs_object: list[RustConstitutiveModel]
     input: dict[str, df.fem.Function]
     output: dict[str, df.fem.Function]
-    ips: np.ndarray[np.uint64] | None = None
+    ips: list[np.ndarray[np.uint64]] | None = None
     spaces: dict[int | tuple[int, int], df.fem.FunctionSpace]
 
     class Config:
@@ -46,19 +47,28 @@ class ConstitutiveModel(BaseModel):
 
     def __init__(
         self,
-        model: RustConstitutiveModel,
+        model: RustConstitutiveModel | list[RustConstitutiveModel],
         rule: QuadratureRule,
         mesh: df.mesh.Mesh,
-        ips: np.ndarray[np.uint64] | None = None,
+        ips: np.ndarray[np.uint64] | list[np.ndarray[np.uint64]] | None = None,
         additional_variables: list[str] | None = None,
     ) -> None:
-        input, output, spaces = ceate_input_and_output(model, rule, mesh, None, additional_variables)
+        if isinstance(model, RustConstitutiveModel):
+            model = [model]
+
+        # checks that all models are of the same type
+        assert reduce(lambda x,y: y if type(x) is type(y) else None, model) is not None
+        input, output, spaces = ceate_input_and_output(model[0], rule, mesh, None, additional_variables)
         super().__init__(rs_object=model, input=input, output=output, ips=ips, spaces=spaces)
 
     def evaluate(self, del_t=1.0) -> None:
         input = {key: value.vector.array for key, value in self.input.items()}
         output = {key: value.vector.array for key, value in self.output.items()}
-        self.rs_object.evaluate(del_t, input, output)
+        if len(self.rs_object) > 1:
+            for model, ips in zip(self.rs_object, self.ips):
+                model.evaluate_some(del_t, ips, input, output)
+        else:
+            self.rs_object[0].evaluate(del_t, input, output)
 
     def evaluate_some(self, del_t=1.0) -> None:
         input = {key: value.vector.array for key, value in self.input.items()}
