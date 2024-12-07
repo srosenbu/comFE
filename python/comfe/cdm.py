@@ -679,16 +679,16 @@ class CDMNonlocalMechanics(CDMSolver):
         nonlocal_initial_config: bool = True,
         cells: list[np.ndarray[np.int32]] | None = None,
     ) -> None:
-        if mass_mechanics is not None:
+        if mass_mechanics is None:
             rho_space = df.fem.FunctionSpace(velocity_space.mesh, ("DG", 0))
             rho = df.fem.Function(rho_space)
-            cells = cells if cells is not None else [np.arange(rho.x.array.size, dtype=np.int32)]
+            cells_ = cells if cells is not None else [np.arange(rho.x.array.size, dtype=np.int32)]
             rho_list = (
                 [model.parameters()["RHO"] for model in rust_model] if cells is not None else [parameters["rho"]]
             )
-            assert len(cells) == len(rho_list)
+            assert len(cells_) == len(rho_list)
 
-            for cells_i, rho_i in zip(cells, rho_list):
+            for cells_i, rho_i in zip(cells_, rho_list):
                 rho.x.array[cells_i] = rho_i
                 rho.x.scatter_forward()
             
