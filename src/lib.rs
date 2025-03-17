@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::jh2::JH23D;
-use crate::jhr::JHR3D;
+//use crate::jhr::JHR3D;
 //use crate::jh_concrete::JHConcrete3D;
 use crate::generic_jh2::GenericJH23D;
 use crate::gradient_jh2::GradientJH23D;
@@ -22,7 +22,7 @@ pub mod jh2;
 //pub mod jh_concrete;
 pub mod generic_jh2;
 pub mod gradient_jh2;
-pub mod jhr;
+//pub mod jhr;
 pub mod hypoelasticity;
 pub mod smallstrain;
 pub mod stress_strain;
@@ -236,6 +236,14 @@ macro_rules! impl_constitutive_model {
                     }
                 }
                 Ok(history_py.into())
+            }
+            fn parameters(&self, py: Python) -> PyResult<PyObject> {
+                let parameters_py = PyDict::new(py);
+                let parameters_rs = self.model.parameters();
+                for (key, value) in parameters_rs.iter() {
+                    parameters_py.set_item(key, value)?;
+                }
+                Ok(parameters_py.into())
             }
         }
         $m.add_class::<$name>()?;

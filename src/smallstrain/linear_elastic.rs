@@ -5,6 +5,8 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct LinearElastic3D {
     pub D: SMatrix<f64, 6, 6>,
+    pub E: f64,
+    pub nu: f64,
 }
 
 
@@ -53,7 +55,7 @@ impl ConstitutiveModel for LinearElastic3D {
             0.0,
             2.0 * mu,
         );
-        Some(Self { D: D })
+        Some(Self { D: D , E: *E, nu: *nu})
     }
     fn evaluate_ip(&self, ip: usize, _del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let strain = input.get_vector::<{Q::MandelStrain.size()}>(Q::MandelStrain, ip);
@@ -72,6 +74,12 @@ impl ConstitutiveModel for LinearElastic3D {
         HashMap::from([
             (Q::MandelStress, Q::MandelStress.q_dim()),
             (Q::MandelTangent, Q::MandelTangent.q_dim()),
+        ])
+    }
+    fn parameters(&self)-> HashMap<String, f64>{
+        HashMap::from([
+            ("E".to_string(), self.E),
+            ("nu".to_string(), self.nu),
         ])
     }
     

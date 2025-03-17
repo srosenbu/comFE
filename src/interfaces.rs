@@ -311,6 +311,7 @@ pub trait ConstitutiveModel {
             return Err("There are inconsistencies in input and output sizes.");
         }
     }
+    fn parameters(&self)->HashMap<String, f64>;
 }
 
 

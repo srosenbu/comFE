@@ -100,12 +100,13 @@ class CDM3D(CDMSolver):
         f_ext: Callable | None,
         bcs: list[df.fem.DirichletBCMetaClass],
         M: df.fem.Function,
-        rust_model: RustConstitutiveModel,
+        rust_model: RustConstitutiveModel | list[RustConstitutiveModel],
         quadrature_rule: QuadratureRule,
         additional_output: list[str] | None = None,
         calculate_total_energy: bool = False,
         calculate_bulk_viscosity: bool = False,
         monitor_distortion: bool = False,
+        cells: list[np.ndarray[np.int32]] | None = None,
     ) -> None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
@@ -122,11 +123,18 @@ class CDM3D(CDMSolver):
         else:
             distortion_expr = None
 
+        ips = [] if cells is not None else None
+        cells = [] if cells is None else cells
+        for cell_array in cells:
+            number_of_ips = quadrature_rule.weights.size
+            ips_array = [cell_array.astype(np.uint64) * number_of_ips + i for i in range(number_of_ips)]
+            ips.append(np.concatenate(ips_array, axis=None))
+
         model = ConstitutiveModel(
             rust_model,
             quadrature_rule,
             function_space.mesh,
-            None,
+            ips,
             additional_output,
         )
 
@@ -654,7 +662,7 @@ class CDMNonlocalMechanics(CDMSolver):
         t0: float,
         f_ext: Callable | None,
         bcs: list[df.fem.DirichletBCMetaClass],
-        rust_model: RustConstitutiveModel,
+        rust_model: RustConstitutiveModel | list[RustConstitutiveModel],
         parameters: dict[str, float],
         nonlocal_parameters: dict[str, float],
         Q_local: str,
@@ -669,12 +677,23 @@ class CDMNonlocalMechanics(CDMSolver):
         mass_nonlocal: df.fem.Function | None = None,
         calculate_bulk_viscosity: bool = False,
         nonlocal_initial_config: bool = True,
+        cells: list[np.ndarray[np.int32]] | None = None,
     ) -> None:
-        mass_mechanics = (
-            mass_mechanics
-            if mass_mechanics is not None
-            else diagonal_mass(velocity_space, parameters["rho"], invert=True)
-        )
+        if mass_mechanics is None:
+            rho_space = df.fem.FunctionSpace(velocity_space.mesh, ("DG", 0))
+            rho = df.fem.Function(rho_space)
+            cells_ = cells if cells is not None else [np.arange(rho.x.array.size, dtype=np.int32)]
+            rho_list = (
+                [model.parameters()["RHO"] for model in rust_model] if cells is not None else [parameters["rho"]]
+            )
+            assert len(cells_) == len(rho_list)
+
+            for cells_i, rho_i in zip(cells_, rho_list):
+                rho.x.array[cells_i] = rho_i
+                rho.x.scatter_forward()
+            
+            mass_mechanics = diagonal_mass(velocity_space, rho, invert=True)
+
         mass_nonlocal = (
             mass_nonlocal
             if mass_nonlocal is not None or nonlocal_solver == ImplicitNonlocal
@@ -690,6 +709,7 @@ class CDMNonlocalMechanics(CDMSolver):
             quadrature_rule,
             additional_output,
             calculate_bulk_viscosity=calculate_bulk_viscosity,
+            cells=cells,
         )
 
         displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None
