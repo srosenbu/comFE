@@ -5,7 +5,7 @@ import dolfinx as df
 import numpy as np
 from pydantic import BaseModel
 
-from .comfe import PyGradientJH23D, PyHypoelasticity3D, PyJH23D, PyLinearElastic3D, PyLinElas3D
+from .comfe import PyGradientJH23D, PyHypoelasticity3D, PyJH23D, PyLinearElastic3D, PyLinElas3D, PyMisesPlasticity3D
 from .helpers import QuadratureRule
 
 __all__ = [
@@ -17,8 +17,11 @@ __all__ = [
     "PyGradientJH23D",
     "PyLinearElastic3D",
     "PyHypoelasticity3D",
+    "PyMisesPlasticity3D",
 ]
-RustConstitutiveModel = PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D | PyHypoelasticity3D
+RustConstitutiveModel = (
+    PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D | PyHypoelasticity3D | PyMisesPlasticity3D
+)
 
 
 class QuadratureModel(ABC):
@@ -57,7 +60,7 @@ class ConstitutiveModel(BaseModel):
             model = [model]
 
         # checks that all models are of the same type
-        assert reduce(lambda x,y: y if type(x) is type(y) else None, model) is not None
+        assert reduce(lambda x, y: y if type(x) is type(y) else None, model) is not None
         input, output, spaces = ceate_input_and_output(model[0], rule, mesh, None, additional_variables)
         super().__init__(rs_object=model, input=input, output=output, ips=ips, spaces=spaces)
 
@@ -93,7 +96,11 @@ def ceate_input_and_output(
     mesh: df.mesh.Mesh,
     spaces: dict[int | tuple[int, int], df.fem.FunctionSpace] | None = None,
     optional_variables: list[str] | None = None,
-) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[int | tuple[int, int], df.fem.FunctionSpace],]:
+) -> tuple[
+    dict[str, np.ndarray],
+    dict[str, np.ndarray],
+    dict[int | tuple[int, int], df.fem.FunctionSpace],
+]:
     inputs = model.define_input()
     outputs = model.define_output()
     inputs.update(model.define_history())
