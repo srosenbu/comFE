@@ -5,7 +5,15 @@ import dolfinx as df
 import numpy as np
 from pydantic import BaseModel
 
-from .comfe import PyGradientJH23D, PyHypoelasticity3D, PyJH23D, PyLinearElastic3D, PyLinElas3D, PyMisesPlasticity3D
+from .comfe import (
+    PyEngelen3D,
+    PyGradientJH23D,
+    PyHypoelasticity3D,
+    PyJH23D,
+    PyLinearElastic3D,
+    PyLinElas3D,
+    PyMisesPlasticity3D,
+)
 from .helpers import QuadratureRule
 
 __all__ = [
@@ -18,9 +26,16 @@ __all__ = [
     "PyLinearElastic3D",
     "PyHypoelasticity3D",
     "PyMisesPlasticity3D",
+    "PyEngelen3D",
 ]
 RustConstitutiveModel = (
-    PyLinElas3D | PyJH23D | PyLinearElastic3D | PyGradientJH23D | PyHypoelasticity3D | PyMisesPlasticity3D
+    PyLinElas3D
+    | PyJH23D
+    | PyLinearElastic3D
+    | PyGradientJH23D
+    | PyHypoelasticity3D
+    | PyMisesPlasticity3D
+    | PyEngelen3D
 )
 
 
