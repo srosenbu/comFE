@@ -10,18 +10,30 @@ pub struct Engelen3D {
     kappa: f64,
     sigma_y: f64,
     h: f64,
-    e_0: f64,
-    
+    e_f: f64,
+    density: f64,
+    alpha_0: f64,
+}
+pub struct EngelenUniaxialStress {
+    mu: f64,
+    kappa: f64,
+    sigma_y: f64,
+    h: f64,
+    e_f: f64,
+    density: f64,
+    alpha_0: f64,
 }
 
-impl ConstitutiveModel for Engelen3D {
+impl ConstitutiveModel for EngelenUniaxialStress {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self> {
         Some(Self {
             mu: *parameters.get("mu").unwrap(),
             kappa: *parameters.get("kappa").unwrap(),
             sigma_y: *parameters.get("sigma_y").unwrap(),
             h: *parameters.get("h").unwrap(),
-            e_0: *parameters.get("e_0").unwrap(),
+            e_f: *parameters.get("e_f").unwrap(),
+            density: *parameters.get("density").unwrap(),
+            alpha_0: *parameters.get("alpha_0").unwrap(),
         })
     }
     fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
@@ -39,7 +51,7 @@ impl ConstitutiveModel for Engelen3D {
 
         let nonlocal_plastic_strain = input.get_scalar(Q::EqNonlocalPlasticStrain, ip);
         let damage_0 = input.get_scalar(Q::Damage, ip);
-        let damage_1 = (1.-f64::exp(-nonlocal_plastic_strain/self.e_0)).max(damage_0);
+        let damage_1 = (1.-f64::exp((self.alpha_0-nonlocal_plastic_strain)/self.e_f)).max(damage_0);
         output.set_scalar(Q::Damage, ip, damage_1);
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
@@ -53,21 +65,28 @@ impl ConstitutiveModel for Engelen3D {
         let sigma_y = sigma_y_scale + h_scale * lambda_0;
 
         //the .max(0.0) contains the check if the stress is already above the yield surface
-        let del_lambda = ((s_tr_eq - sigma_y) / (3. * self.mu + h_scale)).max(0.0);
-        let alpha = 1. - (3. * self.mu * del_lambda) / s_tr_eq;
-        let s_1 = alpha * s_tr;
-        let sigma_1 = s_1 - MANDEL_IDENTITY * p_0;
+        let mut del_lambda = 0.0;
+        let mut scale_dev = 1.0;
+        if sigma_y < s_tr_eq {
+            del_lambda = ((s_tr_eq - sigma_y) / (3. * self.mu + h_scale));
+            scale_dev = 1. - (3. * self.mu * del_lambda) / s_tr_eq;
+        } else {
+            del_lambda = 0.0;
+            scale_dev = 1.0;
+        }
+        let s_1 = scale_dev * s_tr;
+        let sigma_1 = s_1 - MANDEL_IDENTITY * p_1;
         output.set_vector(Q::MandelStress, ip, sigma_1);
         output.set_scalar(Q::EqPlasticStrain, ip, lambda_0 + del_lambda);
 
-        let elastic_rate = -(1. - alpha) / (2. * self.mu * del_t) * s_0 + alpha * d_eps_dev;
+        let elastic_rate = -(1. - scale_dev) / (2. * self.mu * del_t) * s_0 + scale_dev * d_eps_dev;
 
         let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
         let density_1 = density_0 * (1. - f1) / (1. + f1);
         output.set_scalar(Q::Density, ip, density_1);
         let density_mid = 0.5 * (density_0 + density_1);
-        
+
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let s_mid = 0.5 * (s_0 + s_1);
             let deviatoric_rate = d_eps_dev - elastic_rate;
