@@ -31,8 +31,8 @@ impl ConstitutiveModel<6, 36, 0, 2> for LinearElasticity3D {
             tangent.copy_from_slice(tangent_mat.as_slice());
         }
     }
-    fn parameters() -> [String; 2] {
-        ["mu".to_string(), "lambda".to_string()]
+    fn parameters() -> [&'static str; 2] {
+        ["mu", "lambda"]
     }
 }
 

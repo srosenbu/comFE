@@ -19,6 +19,7 @@ pub type ConstitutiveModelFn<
     &mut [f64; HISTORY],
     &[f64; PARAMETERS],
 );
+
 #[repr(C)]
 pub enum Dim {
     Scalar,
@@ -44,7 +45,7 @@ pub trait ConstitutiveModel<
         parameters: &[f64; PARAMETERS],
     );
 
-    fn parameters() -> [String; PARAMETERS];
+    fn parameters() -> [&'static str; PARAMETERS];
 
 }
 
