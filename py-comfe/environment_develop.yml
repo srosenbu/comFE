@@ -1,0 +1,20 @@
+name: comfe
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - rust
+  - maturin
+  - pytest
+  - conda-ecosystem-user-package-isolation
+  - fenics-dolfinx
+  - numpy
+  - scipy
+  - pydantic
+  - ruff
+  - isort
+  - black
+  - pre-commit
+  - pip
+  - pip:
+      - -e .
