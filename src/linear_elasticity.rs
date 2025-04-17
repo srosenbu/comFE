@@ -2,7 +2,7 @@ use crate::consts::*;
 use crate::interfaces::*;
 use crate::mandel::*;
 use core::ffi::c_double;
-use nalgebra::{SMatrix, SVector};
+use nalgebra::{SMatrix, SVector, SVectorView, SVectorViewMut};
 use std::collections::HashMap;
 
 #[repr(C)]
@@ -21,11 +21,11 @@ impl ConstitutiveModel<6, 36, 0, 2> for LinearElasticity3D {
     ) {
         let mu = parameters[0];
         let lambda = parameters[1];
-        let del_strain_vec = SVector::<f64, 6>::from_column_slice(del_strain);
-        let stress_vec = SVector::<f64, 6>::from_column_slice(stress);
-        let new_stress =
-            stress_vec + (trace(&del_strain_vec) * lambda) * SYM_ID_6 + (2.0 * mu) * del_strain_vec;
-        stress.copy_from_slice(new_stress.as_slice());
+        let del_strain_vec = SVectorView::<f64,6>::from_array(del_strain);
+        let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
+        
+        stress_vec += (trace(&del_strain_vec) * lambda) * SYM_ID_6 + (2.0 * mu) * del_strain_vec;
+        
         if let Some(tangent) = tangent {
             let tangent_mat = SYM_ID_6_OUTER_SYM_ID_6 * lambda + (2.0 * mu) * ID_6;
             tangent.copy_from_slice(tangent_mat.as_slice());

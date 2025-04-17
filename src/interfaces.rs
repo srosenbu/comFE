@@ -83,7 +83,7 @@ pub fn evaluate_model<
             && stress_len == history_len
             && (stress_len == tangent_len || tangent.is_none())
     );
-    // This unsafe code is ok because the slices are guaranteed to be the correct length
+    
     let stress_ = slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap();
     let del_strain_ = slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap();
     let history_ = slice_as_chunks_mut::<f64, HISTORY>(history).unwrap();
