@@ -13,6 +13,7 @@ from .comfe import (
     PyLinearElastic3D,
     PyLinElas3D,
     PyMisesPlasticity3D,
+    PyMisesPlasticityExponentialSoftening3D,
 )
 from .helpers import QuadratureRule
 
@@ -27,6 +28,7 @@ __all__ = [
     "PyHypoelasticity3D",
     "PyMisesPlasticity3D",
     "PyEngelen3D",
+    "PyMisesPlasticityExponentialSoftening3D",
 ]
 RustConstitutiveModel = (
     PyLinElas3D
@@ -36,6 +38,7 @@ RustConstitutiveModel = (
     | PyHypoelasticity3D
     | PyMisesPlasticity3D
     | PyEngelen3D
+    | PyMisesPlasticityExponentialSoftening3D
 )
 
 

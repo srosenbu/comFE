@@ -24,7 +24,7 @@ pub struct EngelenUniaxialStress {
     alpha_0: f64,
 }
 
-impl ConstitutiveModel for EngelenUniaxialStress {
+impl ConstitutiveModel for Engelen3D {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self> {
         Some(Self {
             mu: *parameters.get("mu").unwrap(),
