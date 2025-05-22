@@ -170,7 +170,7 @@ impl ConstitutiveModel for MisesPlasticityExponentialSoftening3D {
         let s_tr = s_0 + 2. * self.mu * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
 
-        let mut sigma_y = self.sigma_y * (1. - f64::exp(-lambda_0 / self.e_f));
+        let mut sigma_y = self.sigma_y * (f64::exp(-lambda_0 / self.e_f));
         //the .max(0.0) contains the check if the stress is already above the yield surface
         let mut del_lambda = 0.0;
         let mut lambda_1 = lambda_0;
@@ -179,8 +179,8 @@ impl ConstitutiveModel for MisesPlasticityExponentialSoftening3D {
             let mut iter = 0;
             let mut dsigma_y = 0.0;
             loop{
-                sigma_y = self.sigma_y * (1. - f64::exp(-lambda_1 / self.e_f));
-                dsigma_y = self.sigma_y * (1. / self.e_f) * f64::exp(-lambda_1 / self.e_f);
+                sigma_y = self.sigma_y * (f64::exp(-lambda_1 / self.e_f));
+                dsigma_y = self.sigma_y * (-1. / self.e_f) * f64::exp(-lambda_1 / self.e_f);
                 lambda_1 = lambda_1 - (sigma_y - s_tr_eq + 3.*self.mu*del_lambda) / (3. * self.mu + dsigma_y);
                 del_lambda = lambda_1 - lambda_0;
                 iter += 1;
@@ -280,7 +280,7 @@ impl ConstitutiveModel for MisesPlasticityExponentialSoftening3D {
         ])
     }
 }
-
+#[derive(Debug)]
 pub struct UniaxialStressMisesPlasticityExponentialSoftening3D {
     mu: f64,
     kappa: f64,
@@ -313,7 +313,7 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
         d_eps.y = - poisson_ratio * d_eps.x;
         d_eps.z = - poisson_ratio * d_eps.x;
 
-        let (mut d_eps_vol, mut d_eps_dev) = mandel_decomposition(&d_eps);
+        let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
         d_eps_vol *= -1.0;
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
@@ -324,26 +324,36 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
         let s_tr = s_0 + 2. * self.mu * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
 
-        let mut sigma_y = self.sigma_y * (1. - f64::exp(-lambda_0 / self.e_f));
+        let mut sigma_y = self.sigma_y * (f64::exp(-lambda_0 / self.e_f));
         //the .max(0.0) contains the check if the stress is already above the yield surface
         let mut del_lambda = 0.0;
         let mut lambda_1 = lambda_0;
+        let mut lambda_1_old:f64;
+        let mut f:f64;
+        let mut df:f64;
         let alpha;
         if s_tr_eq > sigma_y {
             let mut iter = 0;
-            let mut dsigma_y = 0.0;
+            let mut dsigma_y:f64;
             loop{
-                sigma_y = self.sigma_y * (1. - f64::exp(-lambda_1 / self.e_f));
-                dsigma_y = self.sigma_y * (1. / self.e_f) * f64::exp(-lambda_1 / self.e_f);
-                lambda_1 = lambda_1 - (sigma_y - s_tr_eq + 3.*self.mu*del_lambda) / (3. * self.mu + dsigma_y);
+                lambda_1_old = lambda_1;
+                sigma_y = self.sigma_y * (f64::exp(-lambda_1 / self.e_f));
+                dsigma_y = self.sigma_y * (-1. / self.e_f) * f64::exp(-lambda_1 / self.e_f);
+                f = sigma_y - s_tr_eq + 3.*self.mu*del_lambda;
+                df = dsigma_y + 3.*self.mu;
+                lambda_1 = lambda_1 - f/df;
                 del_lambda = lambda_1 - lambda_0;
+                
                 iter += 1;
-                if del_lambda.abs()/lambda_1.abs() < 1e-5 {
+                //println!("iter: {}, lambda_1: {}, e/l1: {}, f: {}", iter, lambda_1, (lambda_1-lambda_1_old).abs()/lambda_1.abs(), f);
+                if (lambda_1-lambda_1_old).abs()/lambda_1.abs() < 1e-5 || f.abs() < 1e-8 {
                     break;
                 } else if iter > 100 {
+                    println!("sigma_y_0: {}, sigma_y: {}, s_tr_eq: {}, lambda_0: {}, lambda_1: {}", self.sigma_y*(1.-f64::exp(-lambda_0/self.e_f)) ,sigma_y, s_tr_eq, lambda_0, lambda_1);
                     panic!("Plasticity iteration did not converge");
                 }
             }
+            assert!(lambda_1 > 0.0, "lambda_1: {} not greater than zero", lambda_1);
             alpha = 1. - (3. * self.mu * del_lambda) / s_tr_eq;
         } else {
             alpha = 1.0;

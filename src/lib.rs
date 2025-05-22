@@ -5,13 +5,19 @@ use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::jh2::JH23D;
 //use crate::jhr::JHR3D;
 //use crate::jh_concrete::JHConcrete3D;
+use crate::engelen::{Engelen3D, UniaxialStressEngelen3D};
 use crate::generic_jh2::GenericJH23D;
+use crate::drucker_prager::DruckerPrager3D;
 use crate::gradient_jh2::GradientJH23D;
-use crate::smallstrain::linear_elastic::LinearElastic3D;
-use crate::smallstrain::{evaluate_model, elasticity_3d};
+use crate::gradient_rub::GradientRUB3D;
 use crate::hypoelasticity::Hypoelasticity3D;
-use crate::mises_plasticity::{MisesPlasticity3D, MisesPlasticityExponentialSoftening3D};
-use crate::engelen::Engelen3D;
+use crate::mises_plasticity::{
+    MisesPlasticity3D, MisesPlasticityExponentialSoftening3D,
+    UniaxialStressMisesPlasticityExponentialSoftening3D,
+};
+use crate::rub::RUB3D;
+use crate::smallstrain::linear_elastic::LinearElastic3D;
+use crate::smallstrain::{elasticity_3d, evaluate_model};
 //use crate::stress_strain;
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
@@ -25,9 +31,12 @@ pub mod jh2;
 pub mod generic_jh2;
 pub mod gradient_jh2;
 //pub mod jhr;
+pub mod engelen;
+pub mod gradient_rub;
 pub mod hypoelasticity;
 pub mod mises_plasticity;
-pub mod engelen;
+pub mod rub;
+pub mod drucker_prager;
 pub mod smallstrain;
 pub mod stress_strain;
 
@@ -46,7 +55,7 @@ macro_rules! impl_constitutive_model {
         #[pymethods]
         impl $name {
             #[new]
-            fn new(parameters: HashMap<String, f64>) -> PyResult<Self>{
+            fn new(parameters: HashMap<String, f64>) -> PyResult<Self> {
                 let model = <$model>::new(&parameters).unwrap();
                 Ok($name { model: model })
             }
@@ -378,7 +387,7 @@ impl PyLinearElastic3D {
         Ok(())
     }
 }
-#[pyfunction(name="jaumann_rotation")]
+#[pyfunction(name = "jaumann_rotation")]
 fn py_jaumann_rotation(
     del_t: f64,
     velocity_gradient: PyReadonlyArray1<f64>,
@@ -393,7 +402,7 @@ fn py_jaumann_rotation(
     stress_strain::jaumann_rotation(del_t, &velocity_gradient, &mut stress);
     Ok(())
 }
-#[pyfunction(name="jaumann_rotation_expensive")]
+#[pyfunction(name = "jaumann_rotation_expensive")]
 fn py_jaumann_rotation_expensive(
     del_t: f64,
     velocity_gradient: PyReadonlyArray1<f64>,
@@ -434,7 +443,19 @@ fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     impl_constitutive_model!(PyHypoelasticity3D, Hypoelasticity3D, m);
     impl_constitutive_model!(PyMisesPlasticity3D, MisesPlasticity3D, m);
     impl_constitutive_model!(PyEngelen3D, Engelen3D, m);
-    impl_constitutive_model!(PyMisesPlasticityExponentialSoftening3D, MisesPlasticityExponentialSoftening3D, m);
+    impl_constitutive_model!(PyUniaxialStressEngelen3D, UniaxialStressEngelen3D, m);
+    impl_constitutive_model!(
+        PyMisesPlasticityExponentialSoftening3D,
+        MisesPlasticityExponentialSoftening3D,
+        m
+    );
+    impl_constitutive_model!(
+        PyUniaxialStressMisesPlasticityExponentialSoftening3D,
+        UniaxialStressMisesPlasticityExponentialSoftening3D,
+        m
+    );
+    impl_constitutive_model!(PyRUB3D, RUB3D, m);
+    impl_constitutive_model!(PyGradientRUB3D, GradientRUB3D, m);
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
     Ok(())

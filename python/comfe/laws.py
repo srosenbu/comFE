@@ -8,12 +8,16 @@ from pydantic import BaseModel
 from .comfe import (
     PyEngelen3D,
     PyGradientJH23D,
+    PyGradientRUB3D,
     PyHypoelasticity3D,
     PyJH23D,
     PyLinearElastic3D,
     PyLinElas3D,
     PyMisesPlasticity3D,
     PyMisesPlasticityExponentialSoftening3D,
+    PyRUB3D,
+    PyUniaxialStressEngelen3D,
+    PyUniaxialStressMisesPlasticityExponentialSoftening3D,
 )
 from .helpers import QuadratureRule
 
@@ -28,7 +32,11 @@ __all__ = [
     "PyHypoelasticity3D",
     "PyMisesPlasticity3D",
     "PyEngelen3D",
+    "PyUniaxialStressEngelen3D",
     "PyMisesPlasticityExponentialSoftening3D",
+    "PyUniaxialStressMisesPlasticityExponentialSoftening3D",
+    "PyRUB3D",
+    "PyGradientRUB3D",
 ]
 RustConstitutiveModel = (
     PyLinElas3D
@@ -39,6 +47,10 @@ RustConstitutiveModel = (
     | PyMisesPlasticity3D
     | PyEngelen3D
     | PyMisesPlasticityExponentialSoftening3D
+    | PyUniaxialStressEngelen3D
+    | PyUniaxialStressMisesPlasticityExponentialSoftening3D
+    | PyRUB3D
+    | PyGradientRUB3D
 )
 
 
@@ -173,4 +185,5 @@ def _spaces_from_dict(
                 spaces[value] = rule.create_quadrature_space(mesh)
             q_values_dict[key] = df.fem.Function(spaces[value], name=key)
 
+    return q_values_dict, spaces
     return q_values_dict, spaces
