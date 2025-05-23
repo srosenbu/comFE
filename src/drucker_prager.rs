@@ -3,7 +3,7 @@ use crate::stress_strain::{
     mandel_decomposition, mandel_rate_from_velocity_gradient, I_6, MANDEL_IDENTITY,
     PROJECTION_DEV_6,
 };
-use nalgebra::{RowSVector, SMatrix, SVector};
+use nalgebra::{RowSVector, SMatrix, SMatrixView, SVector};
 use num_dual::{Dual2SVec64, DualNum};
 
 use core::{f64, panic};
@@ -154,6 +154,8 @@ trait IsotropicHardeningPlasticity3D {
     fn k(&self) -> f64;
     fn dk_dsigma(&self) -> SVector<f64, 6>;
     fn dk_dkappa(&self) -> f64;
+    fn D(&self) -> SMatrixView<f64, 6, 6>;
+    fn D_inv(&self) -> SMatrixView<f64, 6, 6>;
 }
 
 #[derive(Debug, Default)]
@@ -402,6 +404,12 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
     fn dk_dkappa(&self) -> f64 {
         self.state.dk_dkappa
     }
+    fn D(&self) -> SMatrixView<f64, 6, 6> {
+        SMatrixView::from(&self.D)
+    }
+    fn D_inv(&self) -> SMatrixView<f64, 6, 6> {
+        SMatrixView::from(&self.D_inv)
+    }
 }
 struct Plasticity3D<MODEL: IsotropicHardeningPlasticity3D> {
     density: f64,
@@ -436,7 +444,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
         let nonlocal_strain = input.get_scalar(Q::EqNonlocalPlasticStrain, ip);
         let mut history = alpha_0;
         let damage_0 = input.get_scalar(Q::Damage, ip);
-
+        let mut damage_1:f64;   
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
 
@@ -455,8 +463,9 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
 
         if self.model.f() < 0.0 {
             // No plasticity
-            output.set_scalar(Q::Damage, ip, self.model.damage());
-            output.set_vector(Q::MandelStress, ip, sigma_tr);
+            sigma_1 = sigma_tr;
+            alpha_1 = alpha_0;
+            damage_1 = self.model.damage();
         } else {
             let mut del_lambda = 0.0;
             let mut sol_0 = SVector::<f64, 8>::from_element(0.0); //make first test fail
@@ -476,17 +485,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
 
             let mut dres = SMatrix::<f64, 8, 8>::zeros();
 
-            let dres_sigma_dsigma = dres.fixed_view::<6, 6>(0, 0);
-            let dres_sigma_dkappa = dres.fixed_view::<6, 1>(0, 6);
-            let dres_sigma_dlambda = dres.fixed_view::<6, 1>(0, 7);
+            let dres_sigma_dsigma = dres.fixed_view_mut::<6, 6>(0, 0);
+            let dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+            let dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
 
-            let dres_kappa_dsigma = dres.fixed_view::<1, 6>(6, 0);
-            let mut dres_kappa_dkappa = dres.fixed_view::<1, 1>(6, 6);
-            let mut dres_kappa_dlambda = dres.fixed_view::<1, 1>(6, 7);
+            let dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+            let dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+            let dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
 
-            let mut dres_f_dsigma = dres.fixed_view::<1, 6>(7, 0);
-            let mut dres_f_dkappa = dres.fixed_view::<1, 1>(7, 6);
-            let mut dres_f_dlambda = dres.fixed_view::<1, 1>(7, 7);
+            let dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+            let dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+            let dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
 
             let mut res = SVector::<f64, 8>::from([
                 res_sigma[0],
@@ -504,6 +513,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
             while res.norm() > 1e-6 && (sol_1 - sol_0).norm() / sol_1.norm() > 1e-6 {
                 sol_0 = sol_1;
 
+                dres_sigma_dsigma.copy_from(&(-I_6 - self.model.D() * del_lambda * self.model.dm_dsigma()));
+                dres_sigma_dkappa.copy_from(&(-self.model.D() * del_lambda * self.model.dm_dkappa()));
+                dres_sigma_dlambda.copy_from(&(- del_lambda * self.model.D()*self.model.m()));
+
+                dres_kappa_dsigma.copy_from_slice((-self.model.dk_dsigma()).as_slice());
+                dres_kappa_dkappa.copy_from_slice(&[-self.model.dk_dkappa()]);
+                dres_kappa_dlambda.copy_from_slice(&[0.0]);
+
+                dres_f_dsigma.copy_from(&self.model.df_dsigma().transpose());
+                dres_f_dkappa.copy_from_slice(&[self.model.df_dkappa()]);
+                dres_f_dlambda.copy_from_slice(&[0.0]);
 
                 let lu = dres.lu();
                 sol_1 = sol_0 - lu.solve(&res).unwrap();
