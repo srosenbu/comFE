@@ -12,124 +12,6 @@ use std::convert::identity;
 use std::error::Error;
 use std::fmt::Debug;
 
-pub trait PlasticityParameters {
-    fn density(&self) -> f64;
-    fn shear_modulus(&self) -> f64;
-    fn bulk_modulus(&self) -> f64;
-}
-
-/// A trait defining functions for plasticity models based on the I1-J2 theory.
-///
-/// This trait provides methods for initializing the model, setting the stress state,
-/// and calculating various functions and their derivatives related to the plasticity model.
-///
-/// # Type Parameters
-/// - `HISTORY`: The size of the history array used to store internal state variables.
-///
-/// # Required Methods
-/// - `new`: Creates a new instance of the implementing type using the provided parameters.
-/// - `set_stress_state`: Sets the current stress state and updates the history variables.
-/// - `f`, `df_di_1`, `df_dj_2`: Functions and derivatives related to the yield surface.
-/// - `dg_di_1`, `dg_dj_2`, `ddg_ddi_1`, `ddg_ddj_2`: Functions and derivatives related to the plastic potential. The first derivative of the plastic potential is called the flow rule. Note that the plastic potential itself does not need to be calculated.
-/// - `k`: Returns the updated history variables.
-pub trait I1J2Functions {
-    /// Creates a new instance of the implementing type using the provided parameters.
-    ///
-    /// # Arguments
-    /// - `parameters`: A `HashMap` containing the material parameters as key-value pairs.
-    ///
-    /// # Returns
-    /// - `Option<Self>`: Returns `Some` if the instance is successfully created, or `None` if creation fails.
-    fn new(parameters: &HashMap<String, f64>) -> Option<Self>
-    where
-        Self: Sized;
-
-    /// Sets the current stress state and updates the history variables.
-    ///
-    /// # Arguments
-    /// - `stress`: A 6-component stress vector.
-    /// - `history`: A reference to the history array containing internal state variables.
-    fn set_model_state(
-        &mut self,
-        stress: &SVector<f64, 6>,
-        history: f64,
-        nonlocal_strain: f64,
-        damage_0: f64,
-    );
-
-    /// Computes the damage variable. This is also used in the calling method to check that damage does not decrease.
-    ///
-    /// # Returns
-    /// - `f64`: The value of the damage variable.
-    fn damage(&self) -> f64;
-
-    /// Computes the value of the yield function `f`.
-    ///
-    /// # Returns
-    /// - `f64`: The value of the yield function.
-    fn f(&self) -> f64;
-
-    /// Computes the derivative of the yield function `f` with respect to the first stress invariant `I1`.
-    ///
-    /// # Returns
-    /// - `f64`: The derivative of `f` with respect to `I1`.
-    fn df_di_1(&self) -> f64;
-
-    /// Computes the derivative of the yield function `f` with respect to the second stress invariant `J2`.
-    ///
-    /// # Returns
-    /// - `f64`: The derivative of `f` with respect to `J2`.
-    fn df_dj_2(&self) -> f64;
-
-    /// Computes the derivative of the yield function `f` with respect to the history `kappa`.
-    ///
-    /// # Returns
-    /// - `f64`: The derivative of `f` with respect to `kappa`.
-    fn df_dkappa(&self) -> f64;
-
-    /// Computes the derivative of the plastic potential `g` with respect to the first stress invariant `I1`.
-    ///
-    /// # Returns
-    /// - `f64`: The derivative of `g` with respect to `I1`.
-    fn dg_di_1(&self) -> f64;
-
-    /// Computes the derivative of the plastic potential `g` with respect to the second stress invariant `J2`.
-    ///
-    /// # Returns
-    /// - `f64`: The derivative of `g` with respect to `J2`.
-    fn dg_dj_2(&self) -> f64;
-
-    /// Computes the second derivative of the plastic potential `g` with respect to the first stress invariant `I1` and the history variable `kappa`.
-    ///
-    /// # Returns
-    /// - `f64`: The second derivative of `g` with respect to `I1` and `kappa`.
-    fn ddg_di_1_dkappa(&self) -> f64;
-
-    /// Computes the second derivative of the plastic potential `g` with respect to the history variable `kappa` and the second stress invariant `J2`.
-    ///
-    /// # Returns
-    /// - `f64`: The second derivative of `g` with respect to `kappa` and `J2`.
-    fn ddg_dj_2_dkappa(&self) -> f64;
-
-    /// Computes the second derivative of the plastic potential `g` with respect to `I1`.
-    ///
-    /// # Returns
-    /// - `f64`: The second derivative of `g` with respect to `I1`.
-    fn ddg_ddi_1(&self) -> f64;
-
-    /// Computes the second derivative of the plastic potential `g` with respect to `J2`.
-    ///
-    /// # Returns
-    /// - `f64`: The second derivative of `g` with respect to `J2`.
-    fn ddg_ddj_2(&self) -> f64;
-
-    /// Returns the updated history variables.
-    ///
-    /// # Returns
-    /// - `f64`: An array containing the updated history variables.
-    fn k(&self) -> f64;
-}
-
 trait IsotropicHardeningPlasticity3D {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self>
     where
@@ -154,8 +36,8 @@ trait IsotropicHardeningPlasticity3D {
     fn k(&self) -> f64;
     fn dk_dsigma(&self) -> SVector<f64, 6>;
     fn dk_dkappa(&self) -> f64;
-    fn D(&self) -> SMatrixView<f64, 6, 6>;
-    fn D_inv(&self) -> SMatrixView<f64, 6, 6>;
+    fn elastic_tangent(&self) -> SMatrixView<f64, 6, 6>;
+    fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6>;
 }
 
 #[derive(Debug, Default)]
@@ -189,103 +71,6 @@ pub struct DruckerPrager3D {
     D_inv: SMatrix<f64, 6, 6>,
     state: DruckerPragerState,
 }
-// impl I1J2Functions for DruckerPrager3D {
-//     fn new(parameters: &HashMap<String, f64>) -> Option<Self>
-//     where
-//         Self: Sized,
-//     {
-//         Some(Self {
-//             a_y: *parameters.get("a_y")?,
-//             b_y: *parameters.get("b_y")?,
-//             d_y: *parameters.get("d_y")?,
-//             e_f: *parameters.get("e_f")?,
-//             h: *parameters.get("h")?,
-//             alpha_0: *parameters.get("alpha_0")?,
-//             state: DruckerPragerState::default(),
-//         })
-//     }
-//     fn set_model_state(
-//         &mut self,
-//         stress: &SVector<f64, 6>,
-//         history: f64,
-//         nonlocal_strain: f64,
-//         damage_0: f64,
-//     ) {
-//         let (p, s) = mandel_decomposition(stress);
-//         let i_1 = -3.0 * p;
-//         let j_2 = 0.5 * s.norm_squared();
-//         self.state.i_1 = i_1;
-//         self.state.j_2 = j_2;
-//         self.state.stress_dev = s;
-//         self.state.history = history;
-//         self.state.nonlocal_strain = nonlocal_strain;
-//         self.state.damage = {
-//             let damage_1 = 1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f);
-//             if damage_1 > damage_0 {
-//                 damage_1
-//             } else {
-//                 damage_0
-//             }
-//         };
-//     }
-//     fn damage(&self) -> f64 {
-//         self.state.damage
-//     }
-
-//     fn f(&self) -> f64 {
-//         self.state.j_2
-//             - (1. - self.state.damage)
-//                 * (1. + self.h * self.state.history)
-//                 * (self.b_y / self.a_y).powi(2)
-//                 * ((self.state.i_1 - self.d_y).powi(2) - self.a_y.powi(2))
-//     }
-
-//     fn df_di_1(&self) -> f64 {
-//         -2.0 * (1. - self.state.damage)
-//             * (1. + self.h * self.state.history)
-//             * (self.b_y / self.a_y).powi(2)
-//             * (self.state.i_1 - self.d_y)
-//     }
-
-//     fn df_dkappa(&self) -> f64 {
-//         -(1. - self.state.damage)
-//             * self.h
-//             * (self.b_y / self.a_y).powi(2)
-//             * ((self.state.i_1 - self.d_y).powi(2) - self.a_y.powi(2))
-//     }
-
-//     fn df_dj_2(&self) -> f64 {
-//         1.0
-//     }
-//     fn dg_di_1(&self) -> f64 {
-//         self.df_di_1()
-//     }
-//     fn dg_dj_2(&self) -> f64 {
-//         self.df_dj_2()
-//     }
-//     fn ddg_di_1_dkappa(&self) -> f64 {
-//         -2.0 * (1. - self.state.damage)
-//             * self.h
-//             * (self.b_y / self.a_y).powi(2)
-//             * (self.state.i_1 - self.d_y)
-//     }
-//     fn ddg_dj_2_dkappa(&self) -> f64 {
-//         0.0
-//     }
-//     fn ddg_ddi_1(&self) -> f64 {
-//         -2.0 * (1. - self.state.damage)
-//             * (1. + self.h * self.state.history)
-//             * (self.b_y / self.a_y).powi(2)
-//     }
-//     fn ddg_ddj_2(&self) -> f64 {
-//         0.0
-//     }
-//     fn k(&self) -> f64 {
-//         let m = self.dg_dj_2() * self.state.stress_dev + self.dg_di_1() * MANDEL_IDENTITY;
-//         f64::sqrt(2. / 3.) * m.norm()
-//     }
-// }
-
 impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self>
     where
@@ -369,8 +154,13 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             * MANDEL_IDENTITY;
         let pl_norm = self.state.del_plastic_strain.norm();
         self.state.k = f64::sqrt(2. / 3.) * pl_norm;
-        self.state.dk_dsigma =
-            f64::sqrt(2. / 3.) * (-self.D_inv) * self.state.del_plastic_strain / pl_norm;
+        self.state.dk_dsigma = {
+            if pl_norm == 0.0 {
+                SVector::<f64, 6>::zeros()
+            } else {
+                f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
+            }
+        };
         self.state.dk_dkappa = 0.0;
     }
 
@@ -404,10 +194,10 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
     fn dk_dkappa(&self) -> f64 {
         self.state.dk_dkappa
     }
-    fn D(&self) -> SMatrixView<f64, 6, 6> {
+    fn elastic_tangent(&self) -> SMatrixView<f64, 6, 6> {
         SMatrixView::from(&self.D)
     }
-    fn D_inv(&self) -> SMatrixView<f64, 6, 6> {
+    fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6> {
         SMatrixView::from(&self.D_inv)
     }
 }
@@ -444,7 +234,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
         let nonlocal_strain = input.get_scalar(Q::EqNonlocalPlasticStrain, ip);
         let mut history = alpha_0;
         let damage_0 = input.get_scalar(Q::Damage, ip);
-        let mut damage_1:f64;   
+        let mut damage_1: f64;
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
         let p_0 = p_0 - input.get_scalar(Q::BulkViscosity, ip);
 
@@ -513,12 +303,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
             while res.norm() > 1e-6 && (sol_1 - sol_0).norm() / sol_1.norm() > 1e-6 {
                 sol_0 = sol_1;
 
-                dres_sigma_dsigma.copy_from(&(-I_6 - self.model.D() * del_lambda * self.model.dm_dsigma()));
-                dres_sigma_dkappa.copy_from(&(-self.model.D() * del_lambda * self.model.dm_dkappa()));
-                dres_sigma_dlambda.copy_from(&(- del_lambda * self.model.D()*self.model.m()));
+                dres_sigma_dsigma.copy_from(
+                    &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
+                );
+                dres_sigma_dkappa.copy_from(
+                    &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
+                );
+                dres_sigma_dlambda
+                    .copy_from(&(-del_lambda * self.model.elastic_tangent() * self.model.m()));
 
                 dres_kappa_dsigma.copy_from_slice((-self.model.dk_dsigma()).as_slice());
-                dres_kappa_dkappa.copy_from_slice(&[-self.model.dk_dkappa()]);
+                dres_kappa_dkappa.copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
                 dres_kappa_dlambda.copy_from_slice(&[0.0]);
 
                 dres_f_dsigma.copy_from(&self.model.df_dsigma().transpose());
@@ -596,9 +391,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
         // /***********************************************************************
         //  * Combine deviatoric and volumetric stresses
         //  **********************************************************************/
-        let s_1 = s_tr * alpha;
-        let sigma_1 = s_1 - MANDEL_IDENTITY * (p_1 + q_1);
-        output.set_vector(Q::MandelStress, ip, sigma_1);
+        output.set_vector(Q::MandelStress, ip, sigma_1 - q_1 * MANDEL_IDENTITY);
 
         // ***********************************************************************
         // Update optional output variables if needed
@@ -616,9 +409,6 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
         if output.is_some(Q::Pressure) {
             output.set_scalar(Q::Pressure, ip, p_1);
         }
-
-        let elastic_rate =
-            -(1. - alpha) / (2. * self.parameters.shear_modulus * del_t) * s_0 + alpha * d_eps_dev;
 
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
