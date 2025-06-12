@@ -1,33 +1,31 @@
 use nalgebra::{coordinates::XYZWAB, Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector};
 use crate::consts::{ID_6, SYM_ID_6, SYM_ID_6_OUTER_SYM_ID_6};
 
-pub fn trace(vector: &XYZWAB<f64>) -> f64 {
-    vector.x + vector.y + vector.z
-}
-
 
 pub trait Mandel<const DIM: usize> {
     fn trace(&self) -> f64;
 
     fn vol_dev(
         &self,
-    ) -> (f64, SVector<f64, DIM>);
+    ) -> (f64, SVector<f64,DIM>);
 
-    fn trace_dev(&self) -> (f64, SVector<f64, DIM>);
+    fn trace_dev(&self) -> (f64, SVector<f64,DIM>);
 
     fn I_1(&self) -> f64 {
         self.trace()
     }
 
     fn J_2(&self) -> f64 {
-        let (_, deviatoric) = self.vol_dev();
-        0.5 * deviatoric.dot(&deviatoric)
+        let (_, dev) = self.trace_dev();
+        0.5 * dev.norm_squared()
     }
     
     fn mises_norm(&self) -> f64 {
         let j_2 = self.J_2();
         (3.0 * j_2).sqrt()
     }
+    fn elasticty(strain: Self, mu:f64, kappa:f64) ->SVector<f64,DIM>;
+    fn elasticity_inv(stress: Self, mu:f64, kappa:f64) -> SVector<f64,DIM>;
 }
 
 pub trait MandelMut<const DIM: usize> : Mandel<DIM> {
@@ -51,7 +49,7 @@ macro_rules! impl_mandel {
                 self.x + self.y + self.z
             }
 
-            fn vol_dev(&self) -> (f64, SVector<f64, $dim>) {
+            fn vol_dev(&self) -> (f64, SVector<f64,$dim>) {
                 let trace = self.trace();
                 let volumetric = trace / 3.0;
                 let mut deviatoric = self.clone_owned();
@@ -59,12 +57,24 @@ macro_rules! impl_mandel {
                 (volumetric, deviatoric)
             }
 
-            fn trace_dev(&self) -> (f64, SVector<f64, $dim>) {
+            fn trace_dev(&self) -> (f64, SVector<f64,$dim>) {
                 let trace = self.trace();
                 let volumetric = trace / 3.0;
                 let mut deviatoric = self.clone_owned();
                 deviatoric.add_volumetric(-volumetric);
                 (trace, deviatoric)
+            }
+            fn elasticty(strain: Self, mu:f64, kappa:f64) ->SVector<f64,$dim> {
+                let (vol, dev) = strain.vol_dev();
+                let mut stress = mu * dev;
+                stress.add_volumetric(vol*kappa);
+                stress
+            }
+            fn elasticity_inv(stress: Self, mu:f64, kappa:f64) -> SVector<f64,$dim> {
+                let (vol, dev) = stress.vol_dev();
+                let mut strain = (1.0/mu) * dev;
+                strain.add_volumetric(vol*(1.0/kappa));
+                strain
             }
         }
     };
