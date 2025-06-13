@@ -57,7 +57,7 @@ impl ConstitutiveModel for LinearElastic3D {
         );
         Some(Self { D: D , E: *E, nu: *nu})
     }
-    fn evaluate_ip(&self, ip: usize, _del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
+    fn evaluate_ip(&mut self, ip: usize, _del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let strain = input.get_vector::<{Q::MandelStrain.size()}>(Q::MandelStrain, ip);
 
         let new_stress = self.D * strain;

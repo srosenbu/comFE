@@ -38,6 +38,7 @@ trait IsotropicHardeningPlasticity3D {
     fn dk_dkappa(&self) -> f64;
     fn elastic_tangent(&self) -> SMatrixView<f64, 6, 6>;
     fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6>;
+    fn del_plastic_strain(&self) -> SVector<f64, 6>;
 }
 
 #[derive(Debug, Default)]
@@ -200,6 +201,9 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
     fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6> {
         SMatrixView::from(&self.D_inv)
     }
+    fn del_plastic_strain(&self) -> SVector<f64, 6> {
+        self.state.del_plastic_strain
+    }
 }
 struct Plasticity3D<MODEL: IsotropicHardeningPlasticity3D> {
     density: f64,
@@ -217,7 +221,13 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
             model: MODEL::new(parameters)?,
         })
     }
-    fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
+    fn evaluate_ip(
+        &mut self,
+        ip: usize,
+        del_t: f64,
+        input: &QValueInput,
+        output: &mut QValueOutput,
+    ) {
         let velocity_gradient = input
             .get_tensor::<{ Q::VelocityGradient.dim() }, { Q::VelocityGradient.size() }>(
                 Q::VelocityGradient,
@@ -275,18 +285,6 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
 
             let mut dres = SMatrix::<f64, 8, 8>::zeros();
 
-            let dres_sigma_dsigma = dres.fixed_view_mut::<6, 6>(0, 0);
-            let dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
-            let dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
-
-            let dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
-            let dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
-            let dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
-
-            let dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
-            let dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
-            let dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
-
             let mut res = SVector::<f64, 8>::from([
                 res_sigma[0],
                 res_sigma[1],
@@ -303,22 +301,35 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
             while res.norm() > 1e-6 && (sol_1 - sol_0).norm() / sol_1.norm() > 1e-6 {
                 sol_0 = sol_1;
 
-                dres_sigma_dsigma.copy_from(
+                // fill dres_sigma_dsigma
+                dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
                     &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
                 );
-                dres_sigma_dkappa.copy_from(
+                //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+                dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
                     &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
                 );
-                dres_sigma_dlambda
+                //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+                dres.fixed_view_mut::<6, 1>(0, 7)
                     .copy_from(&(-del_lambda * self.model.elastic_tangent() * self.model.m()));
 
-                dres_kappa_dsigma.copy_from_slice((-self.model.dk_dsigma()).as_slice());
-                dres_kappa_dkappa.copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
-                dres_kappa_dlambda.copy_from_slice(&[0.0]);
+                //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+                dres.fixed_view_mut::<1, 6>(6, 0)
+                    .copy_from_slice((-self.model.dk_dsigma()).as_slice());
+                //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+                dres.fixed_view_mut::<1, 1>(6, 6)
+                    .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
+                //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+                dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
 
-                dres_f_dsigma.copy_from(&self.model.df_dsigma().transpose());
-                dres_f_dkappa.copy_from_slice(&[self.model.df_dkappa()]);
-                dres_f_dlambda.copy_from_slice(&[0.0]);
+                //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+                dres.fixed_view_mut::<1, 6>(7, 0)
+                    .copy_from(&self.model.df_dsigma().transpose());
+                //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+                dres.fixed_view_mut::<1, 1>(7, 6)
+                    .copy_from_slice(&[self.model.df_dkappa()]);
+                //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+                dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
 
                 let lu = dres.lu();
                 sol_1 = sol_0 - lu.solve(&res).unwrap();
@@ -357,7 +368,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
                 i += 1;
             }
         }
-
+        output.set_scalar(Q::EqPlasticStrain, ip, alpha_1);
         // /***********************************************************************
         //  * UPDATE DENSITY
         //  * The density is updated using the explicit midpoint rule for the
@@ -397,35 +408,23 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
         // Update optional output variables if needed
         // **********************************************************************
 
-        if output.is_some(Q::EqStrainRate) {
-            output.set_scalar(Q::EqStrainRate, ip, d_eps_eq);
-        }
         if output.is_some(Q::MandelStrainRate) {
             output.set_vector(Q::MandelStrainRate, ip, d_eps);
-        }
-        if output.is_some(Q::MisesStress) {
-            output.set_scalar(Q::MisesStress, ip, alpha * s_tr_eq);
-        }
-        if output.is_some(Q::Pressure) {
-            output.set_scalar(Q::Pressure, ip, p_1);
         }
 
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
-            let s_mid = 0.5 * (s_0 + s_1);
-            let deviatoric_rate = d_eps_dev - elastic_rate;
+            let sigma_mid = 0.5 * (sigma_0 + sigma_1);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
+            let e_1 = e_0 + 1. / density_mid * (sigma_mid.dot(&self.model.del_plastic_strain()));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
-            let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = -0.5 * (p_0 + p_1);
-            let deviatoric_rate = elastic_rate;
-            let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
-            let e_1 =
-                e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
-            output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
+            let sigma_mid = 0.5 * (sigma_0 + sigma_1);
+            let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
+            let del_elastic_strain = d_eps * del_t - self.model.del_plastic_strain();
+            let e_1 = e_0 + 1. / density_mid * (sigma_mid.dot(&del_elastic_strain));
+            output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
@@ -438,13 +437,6 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
             let q_mid = -0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
             let e_1 = e_0 + del_t / density_mid * 3. * q_mid * d_eps_vol;
             output.set_scalar(Q::InternalHeatingEnergy, ip, e_1);
-        }
-        if output.is_some(Q::EqPlasticStrain) && input.is_some(Q::EqPlasticStrain) {
-            output.set_scalar(
-                Q::EqPlasticStrain,
-                ip,
-                input.get_scalar(Q::EqPlasticStrain, ip) + del_lambda,
-            );
         }
     }
 
@@ -462,9 +454,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
     /// stored both in in the input and the output.
     fn define_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::MandelStress, QDim::Vector(6)),
+            (Q::EqPlasticStrain, QDim::Scalar),
             (Q::Damage, QDim::Scalar),
-            (Q::BulkingPressure, QDim::Scalar),
             (Q::Density, QDim::Scalar),
             (Q::BulkViscosity, QDim::Scalar),
         ])
@@ -483,15 +474,11 @@ impl<MODEL: IsotropicHardeningPlasticity3D> ConstitutiveModel for Plasticity3D<M
     /// but can be useful for postprocessing.
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::EqStrainRate, QDim::Scalar),
             (Q::MandelStrainRate, QDim::Vector(6)),
-            (Q::MisesStress, QDim::Scalar),
-            (Q::Pressure, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::EqPlasticStrain, QDim::Scalar),
             (Q::InternalPlasticEnergy, QDim::Scalar),
             (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),

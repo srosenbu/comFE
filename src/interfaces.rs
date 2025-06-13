@@ -268,15 +268,15 @@ pub trait ConstitutiveModel {
     }
     //fn initialize(&mut self, input: &QValueInput, output: &mut QValueOutput);
 
-    fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput);
-    fn evaluate(&self, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
+    fn evaluate_ip(&mut self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput);
+    fn evaluate(&mut self, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let n = self.check_size_and_return(input, output).expect("");
         for i in 0..n {
             self.evaluate_ip(i, del_t, input, output);
         }
     }
     fn evaluate_some(
-        &self,
+        &mut self,
         del_t: f64,
         input: &QValueInput,
         output: &mut QValueOutput,

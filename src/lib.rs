@@ -63,7 +63,7 @@ macro_rules! impl_constitutive_model {
                 Ok(format!("{:?}", self.model))
             }
             fn evaluate(
-                &self,
+                &mut self,
                 del_t: f64,
                 input: HashMap<String, PyReadonlyArray1<f64>>,
                 output: HashMap<String, PyReadwriteArray1<f64>>,
@@ -103,7 +103,7 @@ macro_rules! impl_constitutive_model {
                 Ok(())
             }
             fn evaluate_some(
-                &self,
+                &mut self,
                 del_t: f64,
                 input: HashMap<String, PyReadonlyArray1<f64>>,
                 output: HashMap<String, PyReadwriteArray1<f64>>,

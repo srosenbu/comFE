@@ -37,7 +37,7 @@ impl ConstitutiveModel for Engelen3D {
             alpha_0: *parameters.get("alpha_0").unwrap(),
         })
     }
-    fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
+    fn evaluate_ip(&mut self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let velocity_gradient = input
             .get_tensor::<{ Q::VelocityGradient.dim() }, { Q::VelocityGradient.size() }>(
                 Q::VelocityGradient,
@@ -179,7 +179,7 @@ impl ConstitutiveModel for UniaxialStressEngelen3D {
             alpha_0: *parameters.get("alpha_0").unwrap(),
         })
     }
-    fn evaluate_ip(&self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
+    fn evaluate_ip(&mut self, ip: usize, del_t: f64, input: &QValueInput, output: &mut QValueOutput) {
         let velocity_gradient = input
             .get_tensor::<{ Q::VelocityGradient.dim() }, { Q::VelocityGradient.size() }>(
                 Q::VelocityGradient,
