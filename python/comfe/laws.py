@@ -6,6 +6,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from .comfe import (
+    PyDruckerPrager3D,
     PyEngelen3D,
     PyGradientJH23D,
     PyGradientRUB3D,
@@ -37,6 +38,7 @@ __all__ = [
     "PyUniaxialStressMisesPlasticityExponentialSoftening3D",
     "PyRUB3D",
     "PyGradientRUB3D",
+    "PyDruckerPrager3D",
 ]
 RustConstitutiveModel = (
     PyLinElas3D
@@ -51,6 +53,7 @@ RustConstitutiveModel = (
     | PyUniaxialStressMisesPlasticityExponentialSoftening3D
     | PyRUB3D
     | PyGradientRUB3D
+    | PyDruckerPrager3D
 )
 
 

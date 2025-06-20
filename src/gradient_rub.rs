@@ -114,7 +114,8 @@ impl ConstitutiveModel for GradientRUB3D {
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.density - 1.;
-        let tensile_limit = (self.parameters.d_y - self.parameters.a_y) / 3.0 ;
+        let tensile_limit = -(self.parameters.d_y - self.parameters.a_y) / 3.0 ;
+        assert!(tensile_limit < 0.0, "Tensile limit must be negative");
         let p_1 = (self.parameters.bulk_modulus * mu).max((1. - damage_1)*tensile_limit);
 
         // Calculate bulk viscosity
@@ -209,6 +210,7 @@ impl ConstitutiveModel for GradientRUB3D {
     /// stored both in in the input and the output.
     fn define_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
+            (Q::EqPlasticStrain, QDim::Scalar),
             (Q::MandelStress, QDim::Vector(6)),
             (Q::Damage, QDim::Scalar),
             (Q::BulkingPressure, QDim::Scalar),
@@ -238,7 +240,6 @@ impl ConstitutiveModel for GradientRUB3D {
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
-            (Q::EqPlasticStrain, QDim::Scalar),
             (Q::InternalPlasticEnergy, QDim::Scalar),
             (Q::InternalElasticEnergy, QDim::Scalar),
             (Q::InternalEnergy, QDim::Scalar),

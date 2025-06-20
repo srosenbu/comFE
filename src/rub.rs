@@ -133,7 +133,7 @@ impl ConstitutiveModel for RUB3D {
         output.set_scalar(Q::Density, ip, density_1);
 
         let mu = density_1 / self.parameters.density - 1.;
-        let tensile_limit = (self.parameters.d_y - self.parameters.a_y) / 3.0 ;
+        let tensile_limit = -(self.parameters.d_y - self.parameters.a_y) / 3.0 ;
         let p_1 = (self.parameters.bulk_modulus * mu).max((1. - damage_1)*tensile_limit);
 
         // Calculate bulk viscosity
