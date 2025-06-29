@@ -11,7 +11,7 @@ const _: () = assert!(check_constitutive_model_maps::<6,36,2,7,4,4,MisesPlastici
 #[repr(C)]
 struct MisesPlasticity3D();
 
-impl ConstitutiveModel<6, 36, 2, 7, 4, 4> for MisesPlasticity3D {
+impl ConstitutiveModel<6, 2, 7, 4, 4> for MisesPlasticity3D {
 
     const PARAMETERS_MAP: [(&'static str, Dim); 4] = [("mu", Dim::Scalar), ("kappa", Dim::Scalar), ("y_0", Dim::Scalar), ("H", Dim::Scalar)];
     const HISTORY_MAP: [(&'static str, Dim); 2] = [("equivalent_plastic_strain", Dim::Scalar), ("plastic_strain", Dim::RotatableVector(6))];
@@ -22,7 +22,7 @@ impl ConstitutiveModel<6, 36, 2, 7, 4, 4> for MisesPlasticity3D {
         _del_time: f64,
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
-        tangent: Option<&mut [f64; 36]>,
+        tangent: Option<&mut [[f64; 6]; 6]>,
         _history: &mut [f64; 7],
         parameters: &[f64; 4],
     ) {
@@ -37,8 +37,8 @@ impl ConstitutiveModel<6, 36, 2, 7, 4, 4> for MisesPlasticity3D {
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
 
         let (p_0, s_0) = stress_vec.vol_dev();
-        let (eps_vol, eps_dev) = del_strain_vec.vol_dev();
-        let p_1 = p_0 + kappa * eps_vol;
+        let (eps_trace, eps_dev) = del_strain_vec.trace_dev();
+        let p_1 = p_0 + kappa * eps_trace;
 
         let s_tr = s_0 + 2. * mu * eps_dev;
         let s_tr_eq = s_tr.mises_norm();

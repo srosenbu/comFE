@@ -11,7 +11,7 @@ const _: () = assert!(check_constitutive_model_maps::<6,36,0,0,2,2,LinearElastic
 #[repr(C)]
 struct LinearElasticity3D();
 
-impl ConstitutiveModel<6, 36, 0, 0, 2, 2> for LinearElasticity3D {
+impl ConstitutiveModel<6, 0, 0, 2, 2> for LinearElasticity3D {
 
     const PARAMETERS_MAP: [(&'static str, Dim); 2] = [("mu", Dim::Scalar), ("lambda", Dim::Scalar)];
     const HISTORY_MAP: [(&'static str, Dim); 0] = [];
@@ -22,7 +22,7 @@ impl ConstitutiveModel<6, 36, 0, 0, 2, 2> for LinearElasticity3D {
         _del_time: f64,
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
-        tangent: Option<&mut [f64; 36]>,
+        tangent: Option<&mut [[f64;6]; 6]>,
         _history: &mut [f64; 0],
         parameters: &[f64; 2],
     ) {
@@ -35,7 +35,8 @@ impl ConstitutiveModel<6, 36, 0, 0, 2, 2> for LinearElasticity3D {
 
         if let Some(tangent) = tangent {
             let tangent_mat = SYM_ID_6_OUTER_SYM_ID_6 * lambda + (2.0 * mu) * ID_6;
-            tangent.copy_from_slice(tangent_mat.as_slice());
+            let tangent_flat = tangent.as_flattened_mut();
+            tangent_flat.copy_from_slice(tangent_mat.as_slice());
         }
     }
 }
@@ -52,7 +53,7 @@ pub unsafe fn linear_elasticity3d_fn(
 ) {
     let del_strain = unsafe { &*(del_strain as *const [f64; 6]) };
     let stress = unsafe { &mut *(stress as *mut [f64; 6]) };
-    let tangent = Some(unsafe { &mut *(tangent as *mut [f64; 36]) });
+    let tangent = Some(unsafe { &mut *(tangent as *mut [[f64; 6]; 6]) });
     let history = unsafe { &mut *(history as *mut [f64; 0]) };
     let parameters = unsafe { &*(parameters as *const [f64; 2]) };
     LinearElasticity3D::evaluate(
