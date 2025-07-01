@@ -76,6 +76,7 @@ pub fn mandel_rate_from_velocity_gradient(
     )
 }
 
+
 pub const MANDEL_IDENTITY: SVector<f64, 6> = SVector::<f64, 6>::new(1.0, 1.0, 1.0, 0.0, 0.0, 0.0);
 pub const PROJECTION_DEV_6: SMatrix<f64, 6, 6> = SMatrix::<f64, 6,6>::new(
     2./3., -1./3., -1./3., 0., 0., 0.,

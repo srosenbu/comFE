@@ -6,10 +6,9 @@ import dolfinx as df
 import numpy as np
 import ufl
 from dolfinx.cpp.la import ScatterMode
-from petsc4py import PETSc
 from pydantic import BaseModel
 
-from .comfe import jaumann_rotation, jaumann_rotation_expensive
+from .comfe import jaumann_rotation
 from .helpers import LogMixin, QuadratureEvaluator, QuadratureRule, diagonal_mass, set_mesh_coordinates
 from .laws import ConstitutiveModel, RustConstitutiveModel
 
@@ -88,6 +87,7 @@ class CDM3D(CDMSolver):
     total_energy: float | None = None
     distortion_expr: df.fem.Expression | None = None
     viscosity_evaluator: QuadratureEvaluator | None = None
+    damping: float | None = None
     # energy_form: df.fem.FormMetaClass | None = None
 
     class Config:
@@ -107,6 +107,7 @@ class CDM3D(CDMSolver):
         calculate_bulk_viscosity: bool = False,
         monitor_distortion: bool = False,
         cells: list[np.ndarray[np.int32]] | None = None,
+        damping: float | None = None,
     ) -> None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
@@ -205,6 +206,7 @@ class CDM3D(CDMSolver):
             total_energy=total_energy,
             distortion_expr=distortion_expr,
             viscosity_evaluator=viscosity_evaluator,
+            damping=damping,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
@@ -266,14 +268,17 @@ class CDM3D(CDMSolver):
 
         # given: v_n-1/2, x_n/u_n, a_n, f_int_n
         # Advance velocities and nodal positions in time
-        # if self.damping is None:
-        #    c1 = 1.0
-        #    c2 = del_t_mid
-        # else:
-        #    c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
-        #    c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
+        if self.damping is None:
+            c1 = 1.0
+            c2 = del_t_mid
+        else:
+            c1 = (2.0 - self.damping * del_t_mid) / (2.0 + self.damping * del_t_mid)
+            c2 = 2.0 * del_t_mid / (2.0 + self.damping * del_t_mid)
 
-        self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
+        # self.fields["v"].vector.array[:] += del_t_mid * self.M.vector.array * self.fields["f"].vector.array
+        self.fields["v"].vector.array[:] = (
+            c1 * self.fields["v"].vector.array[:] + c2 * self.M.vector.array * self.fields["f"].vector.array[:]
+        )
         self.fields["v"].x.scatter_forward()
 
         df.fem.set_bc(self.fields["v"].vector, self.bcs)
@@ -678,6 +683,7 @@ class CDMNonlocalMechanics(CDMSolver):
         calculate_bulk_viscosity: bool = False,
         nonlocal_initial_config: bool = True,
         cells: list[np.ndarray[np.int32]] | None = None,
+        damping: float | None = None,
     ) -> None:
         if mass_mechanics is None:
             rho_space = df.fem.FunctionSpace(velocity_space.mesh, ("DG", 0))
@@ -691,7 +697,7 @@ class CDMNonlocalMechanics(CDMSolver):
             for cells_i, rho_i in zip(cells_, rho_list):
                 rho.x.array[cells_i] = rho_i
                 rho.x.scatter_forward()
-            
+
             mass_mechanics = diagonal_mass(velocity_space, rho, invert=True)
 
         mass_nonlocal = (
@@ -710,6 +716,7 @@ class CDMNonlocalMechanics(CDMSolver):
             additional_output,
             calculate_bulk_viscosity=calculate_bulk_viscosity,
             cells=cells,
+            damping=damping,
         )
 
         displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None

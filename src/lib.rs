@@ -7,7 +7,7 @@ use crate::jh2::JH23D;
 //use crate::jh_concrete::JHConcrete3D;
 use crate::engelen::{Engelen3D, UniaxialStressEngelen3D};
 use crate::generic_jh2::GenericJH23D;
-use crate::drucker_prager::{DruckerPrager3D, Plasticity3D};
+use crate::drucker_prager::{DruckerPrager23D, DruckerPrager3D, Plasticity3D};
 use crate::gradient_jh2::GradientJH23D;
 use crate::gradient_rub::GradientRUB3D;
 use crate::hypoelasticity::Hypoelasticity3D;
@@ -457,6 +457,7 @@ fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     impl_constitutive_model!(PyRUB3D, RUB3D, m);
     impl_constitutive_model!(PyGradientRUB3D, GradientRUB3D, m);
     impl_constitutive_model!(PyDruckerPrager3D, Plasticity3D<DruckerPrager3D>, m);
+    impl_constitutive_model!(PyDruckerPrager23D, Plasticity3D<DruckerPrager23D>, m);
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
     Ok(())

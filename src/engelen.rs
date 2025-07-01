@@ -56,7 +56,7 @@ impl ConstitutiveModel for Engelen3D {
         output.set_scalar(Q::Damage, ip, damage_1);
 
         let (p_0, s_0) = mandel_decomposition(&sigma_0);
-        let p_1 = p_0 - self.kappa * d_eps_vol * del_t;
+        let p_1 = p_0 - self.kappa * 3.0 * d_eps_vol * del_t;
 
         let s_tr = s_0 + 2. * self.mu * d_eps_dev * del_t;
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
