@@ -165,7 +165,8 @@ pub fn evaluate_model<
 {
     let parameters: [f64; PARAMETERS] = parameters
         .try_into()
-        .expect("Slice length does not match array length");
+        .expect(&format!("Length of parameters slice does not match the expected length. Expected: {}, got: {}.",
+            PARAMETERS, parameters.len()));
 
     let (stress_, stress_rest) = stress.as_chunks_mut::<STRESS_STRAIN>();
     let (del_strain_, del_strain_rest) = del_strain.as_chunks::<STRESS_STRAIN>();
@@ -211,6 +212,7 @@ pub fn evaluate_model<
         let mut history_chunk = history_[i];
         let tangent_chunk: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]> =
             tangent_.as_mut().map(|t| &mut t[i]);
+
         MODEL::evaluate(
             time,
             del_time,
