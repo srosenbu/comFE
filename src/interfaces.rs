@@ -2,14 +2,12 @@ use std::collections::HashMap;
 use std::num::NonZeroUsize;
 
 use crate::consts::*;
-use crate::utils::{slice_as_chunks, slice_as_chunks_mut};
 use konst::{const_eq, eq_str};
 use nalgebra::{SMatrix, SVector, SVectorView, Scalar};
 use phf::{Map, OrderedMap};
 
 pub type ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
-    const TANGENT: usize,
     const HISTORY: usize,
     const PARAMETERS: usize,
 > = fn(
@@ -17,7 +15,7 @@ pub type ConstitutiveModelFn<
     f64,
     &[f64; STRESS_STRAIN],
     &mut [f64; STRESS_STRAIN],
-    Option<&mut [f64; TANGENT]>,
+    Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
     &mut [f64; HISTORY],
     &[f64; PARAMETERS],
 );
@@ -44,7 +42,6 @@ impl Dim {
 
 pub trait ConstitutiveModel<
     const STRESS_STRAIN: usize,
-    //const TANGENT: usize,
     const N_HISTORY: usize,
     const HISTORY: usize,
     const N_PARAMETERS: usize,
@@ -193,17 +190,21 @@ pub fn evaluate_model<
             && (stress_len == tangent_len || tangent_.is_none()),
         "Stress, strain, history, and tangent lengths do not match: \
         stress_len: {}, del_strain_len: {}, history_len: {}, tangent_len: {}",
-        stress_len, del_strain_len, history_len, tangent_len
+        stress_len,
+        del_strain_len,
+        history_len,
+        tangent_len
     );
     assert!(
         stress_rest.is_empty()
             && del_strain_rest.is_empty()
             && history_rest.is_empty()
-            && tangent_.as_ref().map_or(true, |t| t.is_empty())
-        ,
+            && tangent_.as_ref().map_or(true, |t| t.is_empty()),
         "Input slices are not of the correct length: \
         stress_rest: {:?}, del_strain_rest: {:?}, history_rest: {:?}",
-        stress_rest, del_strain_rest, history_rest
+        stress_rest,
+        del_strain_rest,
+        history_rest
     );
 
     for i in 0..stress_len {
@@ -226,11 +227,10 @@ pub fn evaluate_model<
 }
 pub fn evaluate_model_fn<
     const STRESS_STRAIN: usize,
-    const TANGENT: usize,
     const HISTORY: usize,
     const PARAMETERS: usize,
 >(
-    model: ConstitutiveModelFn<STRESS_STRAIN, TANGENT, HISTORY, PARAMETERS>,
+    model: ConstitutiveModelFn<STRESS_STRAIN, HISTORY, PARAMETERS>,
     time: f64,
     del_time: f64,
     del_strain: &[f64],
@@ -243,32 +243,54 @@ pub fn evaluate_model_fn<
         .try_into()
         .expect("Slice length does not match array length");
 
-    let stress_len = stress.len() / STRESS_STRAIN;
-    let strain_len = del_strain.len() / STRESS_STRAIN;
-    let history_len = history.len() / HISTORY;
-    let tangent_len = tangent
-        .as_ref()
-        .map(|t| t.len() / STRESS_STRAIN.pow(2))
-        .unwrap_or(0);
+    let (stress_, stress_rest) = stress.as_chunks_mut::<STRESS_STRAIN>();
+    let (del_strain_, del_strain_rest) = del_strain.as_chunks::<STRESS_STRAIN>();
+    let (history_, history_rest) = history.as_chunks_mut::<HISTORY>();
+    let mut tangent_ = {
+        match tangent {
+            Some(t) => {
+                let (tangent_, tangent_rest_1) = t.as_chunks_mut::<STRESS_STRAIN>();
+                let (tangent_, tangent_rest_2) = tangent_.as_chunks_mut::<STRESS_STRAIN>();
+                Some(tangent_)
+            }
+            None => None,
+        }
+    };
+
+    let stress_len = stress_.len();
+    let del_strain_len = del_strain_.len();
+    let history_len = history_.len();
+    let tangent_len = tangent_.as_ref().map_or(0, |t| t.len());
 
     assert!(
-        stress_len == strain_len
+        stress_len == del_strain_len
             && stress_len == history_len
-            && (stress_len == tangent_len || tangent.is_none())
+            && (stress_len == tangent_len || tangent_.is_none()),
+        "Stress, strain, history, and tangent lengths do not match: \
+        stress_len: {}, del_strain_len: {}, history_len: {}, tangent_len: {}",
+        stress_len,
+        del_strain_len,
+        history_len,
+        tangent_len
     );
-    // This unsafe code is ok because the slices are guaranteed to be the correct length
-    let stress_ = unsafe { slice_as_chunks_mut::<f64, STRESS_STRAIN>(stress).unwrap_unchecked() };
-    let del_strain_ =
-        unsafe { slice_as_chunks::<f64, STRESS_STRAIN>(del_strain).unwrap_unchecked() };
-    let history_ = unsafe { slice_as_chunks_mut::<f64, HISTORY>(history).unwrap_unchecked() };
-    let mut tangent_ =
-        unsafe { tangent.map(|t| slice_as_chunks_mut::<f64, TANGENT>(t).unwrap_unchecked()) };
+    assert!(
+        stress_rest.is_empty()
+            && del_strain_rest.is_empty()
+            && history_rest.is_empty()
+            && tangent_.as_ref().map_or(true, |t| t.is_empty()),
+        "Input slices are not of the correct length: \
+        stress_rest: {:?}, del_strain_rest: {:?}, history_rest: {:?}",
+        stress_rest,
+        del_strain_rest,
+        history_rest
+    );
 
     for i in 0..stress_len {
         let mut stress_chunk = stress_[i];
         let del_strain_chunk = del_strain_[i];
         let mut history_chunk = history_[i];
-        let tangent_chunk: Option<&mut [f64; TANGENT]> = tangent_.as_mut().map(|t| &mut t[i]);
+        let tangent_chunk: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]> =
+            tangent_.as_mut().map(|t| &mut t[i]);
 
         model(
             time,
