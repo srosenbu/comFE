@@ -517,8 +517,8 @@ if __name__ == "__main__":
     #     "a_r": [5100000.0, ""],
     #     "b_r": [424932.58248730964, ""],
     #     "e_f": [0.002, ""],
-    #     "h": [100.0, ""],
-    #     "alpha_0": [0.00, ""],
+    #     "h": [0.0, ""],
+    #     "alpha_0": [1.00, ""],
     # }
     # test_uniaxial_strain_3D(co.laws.PyGradientRUB3D, parameters_rub)
     # parameters_engelen = {
@@ -545,9 +545,10 @@ if __name__ == "__main__":
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
-        "radial_factor": [0.999, ""],
+        "radial_factor": [0.0, ""],
     }
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager, 0.1)
+    # test_uniaxial_strain_3D(co.laws.PyDruckerPragerClassic3D, parameters_drucker_prager)
     test_uniaxial_strain_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager)
     # parameters_linear_elasticity = {
     #     "density": [2.440e-6, "kg / mm**3"],
