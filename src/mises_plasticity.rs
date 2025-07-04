@@ -1,10 +1,12 @@
 use crate::consts::*;
 use crate::interfaces::*;
 use crate::mandel::*;
+use crate::impl_array_equivalent;
 use core::ffi::c_double;
 use nalgebra::{SMatrix, SVector, SVectorView, SVectorViewMut};
 use phf::{Map, phf_map};
 use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
 
 const _: () = assert!(check_constitutive_model_maps::<
     6,
@@ -19,59 +21,22 @@ const _: () = assert!(check_constitutive_model_maps::<
 #[repr(C)]
 struct MisesPlasticity3D();
 
+#[repr(C)]
 struct MisesPlasticityParameters {
     mu: f64,
     kappa: f64,
     y_0: f64,
     h: f64,
 }
+
+#[repr(C)]
 struct MisesPlasticityHistory {
-    equivalent_plastic_strain: f64,
+    alpha: f64,
     plastic_strain: [f64; 6],
 }
 
-impl ArrayEquivalent<4> for MisesPlasticityParameters {
-    #[inline]
-    fn from_array(array: &[f64; 4]) -> &Self {
-        unsafe { &*(array as *const [f64; 4] as *const Self) }
-    }
-
-    #[inline]
-    fn from_array_mut(array: &mut [f64; 4]) -> &mut Self {
-        unsafe { &mut *(array as *mut [f64; 4] as *mut Self) }
-    }
-
-    #[inline]
-    fn as_array(&self) -> &[f64; 4] {
-        unsafe { &*(self as *const Self as *const [f64; 4]) }
-    }
-
-    #[inline]
-    fn as_array_mut(&mut self) -> &mut [f64; 4] {
-        unsafe { &mut *(self as *mut Self as *mut [f64; 4]) }
-    }
-}
-impl ArrayEquivalent<7> for MisesPlasticityHistory {
-    #[inline]
-    fn from_array(array: &[f64; 7]) -> &Self {
-        unsafe { &*(array as *const [f64; 7] as *const Self) }
-    }
-
-    #[inline]
-    fn from_array_mut(array: &mut [f64; 7]) -> &mut Self {
-        unsafe { &mut *(array as *mut [f64; 7] as *mut Self) }
-    }
-
-    #[inline]
-    fn as_array(&self) -> &[f64; 7] {
-        unsafe { &*(self as *const Self as *const [f64; 7]) }
-    }
-
-    #[inline]
-    fn as_array_mut(&mut self) -> &mut [f64; 7] {
-        unsafe { &mut *(self as *mut Self as *mut [f64; 7]) }
-    }
-}
+impl_array_equivalent!(MisesPlasticityParameters, 4);
+impl_array_equivalent!(MisesPlasticityHistory, 7);
 
 impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
     const PARAMETERS_MAP: [(&'static str, Dim); 4] = [
@@ -106,7 +71,7 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
 
         // Unpack history
         let history_ = MisesPlasticityHistory::from_array_mut(history);
-        let alpha = history_.equivalent_plastic_strain;
+        let alpha = history_.alpha;
         let mut plastic_strain_vec =
             SVectorViewMut::<f64, 6>::from_array(&mut history_.plastic_strain);
 
@@ -141,7 +106,7 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
             // determine the plastic strain
             let n = s_tr / s_tr_eq;
             plastic_strain_vec += del_gamma * n;
-            history_.equivalent_plastic_strain += del_alpha;
+            history_.alpha += del_alpha;
 
             stress_vec.copy_from(&(p_1 * SYM_ID_6 + theta * s_tr));
 

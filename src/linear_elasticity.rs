@@ -1,26 +1,30 @@
 use crate::consts::*;
-use crate::impl_array_equivalent;
+use crate::{impl_array_equivalent, create_struct_with_field_names};
 use crate::interfaces::*;
 use crate::mandel::*;
 use core::ffi::c_double;
 use nalgebra::{SMatrix, SVector, SVectorView, SVectorViewMut};
 use phf::{phf_map, Map};
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
 
 const _: () = assert!(check_constitutive_model_maps::<6,36,0,0,2,2,LinearElasticity3D>());
 
 const PARAMETERS_MAP_: [(&'static str, Dim); 2] = [("mu", Dim::Scalar), ("lambda", Dim::Scalar)];
+
 #[repr(C)]
 struct LinearElasticity3D();
 
-#[repr(C)]
-struct LinearElasticityParameters {
-    mu: f64,
-    lambda: f64,
-}
-#[repr(C)]
-struct LinearElasticityHistory ();
-
+create_struct_with_field_names!(
+    LinearElasticityParameters,
+    [(mu, f64),
+    (lambda, f64)]
+);
+create_struct_with_field_names!(
+    LinearElasticityHistory,
+    []
+);
 impl_array_equivalent!(LinearElasticityParameters, 2);
 impl_array_equivalent!(LinearElasticityHistory, 0);
 
