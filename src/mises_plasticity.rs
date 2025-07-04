@@ -19,7 +19,61 @@ const _: () = assert!(check_constitutive_model_maps::<
 #[repr(C)]
 struct MisesPlasticity3D();
 
-impl ConstitutiveModel<6, 2, 7, 4, 4> for MisesPlasticity3D {
+struct MisesPlasticityParameters {
+    mu: f64,
+    kappa: f64,
+    y_0: f64,
+    h: f64,
+}
+struct MisesPlasticityHistory {
+    equivalent_plastic_strain: f64,
+    plastic_strain: [f64; 6],
+}
+
+impl ArrayEquivalent<4> for MisesPlasticityParameters {
+    #[inline]
+    fn from_array(array: &[f64; 4]) -> &Self {
+        unsafe { &*(array as *const [f64; 4] as *const Self) }
+    }
+
+    #[inline]
+    fn from_array_mut(array: &mut [f64; 4]) -> &mut Self {
+        unsafe { &mut *(array as *mut [f64; 4] as *mut Self) }
+    }
+
+    #[inline]
+    fn as_array(&self) -> &[f64; 4] {
+        unsafe { &*(self as *const Self as *const [f64; 4]) }
+    }
+
+    #[inline]
+    fn as_array_mut(&mut self) -> &mut [f64; 4] {
+        unsafe { &mut *(self as *mut Self as *mut [f64; 4]) }
+    }
+}
+impl ArrayEquivalent<7> for MisesPlasticityHistory {
+    #[inline]
+    fn from_array(array: &[f64; 7]) -> &Self {
+        unsafe { &*(array as *const [f64; 7] as *const Self) }
+    }
+
+    #[inline]
+    fn from_array_mut(array: &mut [f64; 7]) -> &mut Self {
+        unsafe { &mut *(array as *mut [f64; 7] as *mut Self) }
+    }
+
+    #[inline]
+    fn as_array(&self) -> &[f64; 7] {
+        unsafe { &*(self as *const Self as *const [f64; 7]) }
+    }
+
+    #[inline]
+    fn as_array_mut(&mut self) -> &mut [f64; 7] {
+        unsafe { &mut *(self as *mut Self as *mut [f64; 7]) }
+    }
+}
+
+impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
     const PARAMETERS_MAP: [(&'static str, Dim); 4] = [
         ("mu", Dim::Scalar),
         ("kappa", Dim::Scalar),
@@ -31,6 +85,9 @@ impl ConstitutiveModel<6, 2, 7, 4, 4> for MisesPlasticity3D {
         ("plastic_strain", Dim::RotatableVector(6)),
     ];
 
+    type History = MisesPlasticityHistory;
+    type Parameters = MisesPlasticityParameters;
+
     #[inline]
     fn evaluate(
         _time: f64,
@@ -38,15 +95,20 @@ impl ConstitutiveModel<6, 2, 7, 4, 4> for MisesPlasticity3D {
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
         tangent: Option<&mut [[f64; 6]; 6]>,
-        _history: &mut [f64; 7],
+        history: &mut [f64; 7],
         parameters: &[f64; 4],
     ) {
-        let mu = parameters[0];
-        let kappa = parameters[1];
-        let y_0 = parameters[2];
-        let h = parameters[3];
-        let equivalent_plastic_strain = _history[0];
-        let mut plastic_strain = SVectorViewMut::<f64,6>::from_slice(&mut _history[1..7]);
+        let parameters_ = MisesPlasticityParameters::from_array(parameters);
+        let mu = parameters_.mu;
+        let kappa = parameters_.kappa;
+        let y_0 = parameters_.y_0;
+        let h = parameters_.h;
+
+        // Unpack history
+        let history_ = MisesPlasticityHistory::from_array_mut(history);
+        let alpha = history_.equivalent_plastic_strain;
+        let mut plastic_strain_vec =
+            SVectorViewMut::<f64, 6>::from_array(&mut history_.plastic_strain);
 
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
@@ -58,42 +120,38 @@ impl ConstitutiveModel<6, 2, 7, 4, 4> for MisesPlasticity3D {
         let s_tr = s_0 + 2. * mu * eps_dev;
         let s_tr_eq = s_tr.mises_norm();
 
-        let sigma_y = y_0 + h * equivalent_plastic_strain;
+        let sigma_y = y_0 + h * alpha;
 
         //the .max(0.0) contains the check if the stress is already above the yield surface
         if s_tr_eq < sigma_y {
             // Elastic step
             stress_vec.copy_from(&(p_1 * SYM_ID_6 + s_tr));
             if let Some(tangent) = tangent {
-                tangent.copy_from_slice(
-                    &(kappa * SYM_ID_6_OUTER_SYM_ID_6 + 2. * mu * PROJECTION_DEV_6)
-                        .data
-                        .0,
-                );
+                *tangent = (kappa * SYM_ID_6_OUTER_SYM_ID_6 + 2. * mu * PROJECTION_DEV_6)
+                    .data
+                    .0;
             }
             return;
         } else {
             let del_alpha = (s_tr_eq - sigma_y) / (3. * mu + h);
-            let del_gamma = f64::sqrt(3./2.) * del_alpha;
+            let del_gamma = f64::sqrt(3. / 2.) * del_alpha;
             let theta = 1. - (3. * mu * del_alpha) / s_tr_eq;
 
             // Update the equivalent plastic strain
             // determine the plastic strain
             let n = s_tr / s_tr_eq;
-            plastic_strain += del_gamma * n;
-            _history[0] += del_alpha;
-
+            plastic_strain_vec += del_gamma * n;
+            history_.equivalent_plastic_strain += del_alpha;
 
             stress_vec.copy_from(&(p_1 * SYM_ID_6 + theta * s_tr));
 
             if let Some(tangent) = tangent {
                 let theta_bar = 1.0 / (1.0 + (h / (3.0 * mu))) - (1.0 - theta);
-                let tangent_new =
-                    kappa * SYM_ID_6_OUTER_SYM_ID_6 + 2.0 * mu * theta * PROJECTION_DEV_6
-                        + 2.0 * mu * theta_bar *  n * n.transpose();
-                tangent.copy_from_slice(
-                    &(tangent_new.data.0),
-                );
+                let tangent_new = kappa * SYM_ID_6_OUTER_SYM_ID_6
+                    + 2.0 * mu * theta * PROJECTION_DEV_6
+                    + 2.0 * mu * theta_bar * n * n.transpose();
+                // Copy the tangent matrix to the output
+                *tangent = tangent_new.data.0;
             }
         }
     }

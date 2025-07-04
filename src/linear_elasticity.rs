@@ -1,4 +1,5 @@
 use crate::consts::*;
+use crate::impl_array_equivalent;
 use crate::interfaces::*;
 use crate::mandel::*;
 use core::ffi::c_double;
@@ -8,14 +9,28 @@ use std::collections::HashMap;
 
 const _: () = assert!(check_constitutive_model_maps::<6,36,0,0,2,2,LinearElasticity3D>());
 
+const PARAMETERS_MAP_: [(&'static str, Dim); 2] = [("mu", Dim::Scalar), ("lambda", Dim::Scalar)];
 #[repr(C)]
 struct LinearElasticity3D();
 
-impl ConstitutiveModel<6, 0, 0, 2, 2> for LinearElasticity3D {
+#[repr(C)]
+struct LinearElasticityParameters {
+    mu: f64,
+    lambda: f64,
+}
+#[repr(C)]
+struct LinearElasticityHistory ();
 
-    const PARAMETERS_MAP: [(&'static str, Dim); 2] = [("mu", Dim::Scalar), ("lambda", Dim::Scalar)];
+impl_array_equivalent!(LinearElasticityParameters, 2);
+impl_array_equivalent!(LinearElasticityHistory, 0);
+
+impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
+
+    const PARAMETERS_MAP: [(&'static str, Dim); 2] = PARAMETERS_MAP_;
     const HISTORY_MAP: [(&'static str, Dim); 0] = [];
 
+    type History = LinearElasticityHistory;
+    type Parameters = LinearElasticityParameters;
     #[inline]
     fn evaluate(
         _time: f64,
@@ -26,8 +41,10 @@ impl ConstitutiveModel<6, 0, 0, 2, 2> for LinearElasticity3D {
         _history: &mut [f64; 0],
         parameters: &[f64; 2],
     ) {
-        let mu = parameters[0];
-        let lambda = parameters[1];
+        // Unpack parameters
+        let parameters_ = LinearElasticityParameters::from_array(parameters);
+        let mu = parameters_.mu;
+        let lambda = parameters_.lambda;
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
 
