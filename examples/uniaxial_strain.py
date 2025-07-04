@@ -533,9 +533,9 @@ if __name__ == "__main__":
     # }
     # test_uniaxial_strain_3D(co.laws.PyUniaxialStressEngelen3D, parameters_engelen)
     parameters_drucker_prager = {
-        "a_y": [5111012.97882567, ""],
-        "b_y": [1277753.2447064174, ""],
-        "d_y": [15311012.97882567, ""],
+        "a_y": [5111012.97882567, "Pa"],
+        "b_y": [1277753.2447064174, "Pa"],
+        "d_y": [15311012.97882567, "Pa"],
         "e_f": [0.002, ""],
         "h": [00.0, ""],
         "alpha_0": [1.0025, ""],
