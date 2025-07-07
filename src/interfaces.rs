@@ -61,33 +61,47 @@ macro_rules! create_struct_with_field_names {
 }
 
 
-#[macro_export] macro_rules! impl_array_equivalent {
+#[macro_export] macro_rules! impl_from_array {
     ($type:ty, $size:expr) => {
         const _: () = assert!(std::mem::size_of::<[f64; $size]>() == std::mem::size_of::<$type>(), "size mismatch");
         
-        impl ArrayEquivalent<$size> for $type {
-            
-            #[inline]
-            fn from_array(array: &[f64; $size]) -> &Self {
-                unsafe { &*(array as *const [f64; $size] as *const Self) }
-            }
-
-            #[inline]
-            fn from_array_mut(array: &mut [f64; $size]) -> &mut Self {
-                unsafe { &mut *(array as *mut [f64; $size] as *mut Self) }
-            }
-
-            #[inline]
-            fn as_array(&self) -> &[f64; $size] {
+        impl AsRef<[f64;$size]> for $type {
+            fn as_ref(&self) -> &[f64;$size] {
                 unsafe { &*(self as *const Self as *const [f64; $size]) }
             }
-
-            #[inline]
-            fn as_array_mut(&mut self) -> &mut [f64; $size] {
-                unsafe { &mut *(self as *mut Self as *mut [f64; $size]) }
+        }
+        impl AsRef<$type> for [f64;$size] {
+            fn as_ref(&self) -> &$type {
+                unsafe { &*(self as *const [f64;$size] as *const $type )}
             }
         }
-    };
+        impl From<&[f64;$size]> for &$type {
+            fn from(array: &[f64;$size]) -> Self {
+                unsafe { *(array as *const [f64; $size] as *const Self) }
+            }
+        }
+    }
+    //         #[inline]
+    //         fn from_array(array: &[f64; $size]) -> &Self {
+    //             unsafe { &*(array as *const [f64; $size] as *const Self) }
+    //         }
+
+    //         #[inline]
+    //         fn from_array_mut(array: &mut [f64; $size]) -> &mut Self {
+    //             unsafe { &mut *(array as *mut [f64; $size] as *mut Self) }
+    //         }
+
+    //         #[inline]
+    //         fn as_array(&self) -> &[f64; $size] {
+    //             unsafe { &*(self as *const Self as *const [f64; $size]) }
+    //         }
+
+    //         #[inline]
+    //         fn as_array_mut(&mut self) -> &mut [f64; $size] {
+    //             unsafe { &mut *(self as *mut Self as *mut [f64; $size]) }
+    //         }
+    //     }
+    // };
 }
 pub trait ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
@@ -96,12 +110,15 @@ pub trait ConstitutiveModelFn<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
 >
+    where 
+        [f64;PARAMETERS]: AsRef<Self::Parameters>,
+        [f64;HISTORY]: AsRef<Self::History>,
 {
     const HISTORY_MAP: [(&'static str, Dim); N_HISTORY];
     const PARAMETERS_MAP: [(&'static str, Dim); N_PARAMETERS];
 
-    type History: ArrayEquivalent<HISTORY>;
-    type Parameters: ArrayEquivalent<PARAMETERS>;
+    type History: AsRef<[f64;HISTORY]>;
+    type Parameters: AsRef<[f64;PARAMETERS]>;
 
     fn evaluate(
         time: f64,
@@ -112,6 +129,7 @@ pub trait ConstitutiveModelFn<
         history: &mut [f64; HISTORY],
         parameters: &[f64; PARAMETERS],
     );
+
 }
 
 pub const fn check_constitutive_model_maps<
