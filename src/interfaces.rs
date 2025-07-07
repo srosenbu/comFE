@@ -43,6 +43,29 @@ pub trait ArrayEquivalent<const N:usize> : Sized{
     fn as_array_mut(&mut self) -> &mut [f64; N];
 
 }
+
+impl<const N:usize> ArrayEquivalent<N> for [f64;N] {
+    #[inline]
+    fn from_array(array: &[f64; N]) -> &Self {
+        array
+    }
+
+    #[inline]
+    fn from_array_mut(array: &mut [f64; N]) -> &mut Self {
+        array
+    }
+
+    #[inline]
+    fn as_array(&self) -> &[f64; N] {
+        self
+    }
+
+    #[inline]
+    fn as_array_mut(&mut self) -> &mut [f64; N] {
+        self
+    }
+}
+
 #[macro_export]
 macro_rules! create_struct_with_field_names {
     ($struct_name:ident, [$(($field_name:ident, $type:ty)),*]) => {
@@ -61,47 +84,58 @@ macro_rules! create_struct_with_field_names {
 }
 
 
-#[macro_export] macro_rules! impl_from_array {
+#[macro_export] macro_rules! impl_array_equivalent {
     ($type:ty, $size:expr) => {
         const _: () = assert!(std::mem::size_of::<[f64; $size]>() == std::mem::size_of::<$type>(), "size mismatch");
         
-        impl AsRef<[f64;$size]> for $type {
-            fn as_ref(&self) -> &[f64;$size] {
-                unsafe { &*(self as *const Self as *const [f64; $size]) }
-            }
-        }
-        impl AsRef<$type> for [f64;$size] {
-            fn as_ref(&self) -> &$type {
-                unsafe { &*(self as *const [f64;$size] as *const $type )}
-            }
-        }
-        impl From<&[f64;$size]> for &$type {
-            fn from(array: &[f64;$size]) -> Self {
-                unsafe { *(array as *const [f64; $size] as *const Self) }
-            }
-        }
-    }
-    //         #[inline]
-    //         fn from_array(array: &[f64; $size]) -> &Self {
-    //             unsafe { &*(array as *const [f64; $size] as *const Self) }
-    //         }
-
-    //         #[inline]
-    //         fn from_array_mut(array: &mut [f64; $size]) -> &mut Self {
-    //             unsafe { &mut *(array as *mut [f64; $size] as *mut Self) }
-    //         }
-
-    //         #[inline]
-    //         fn as_array(&self) -> &[f64; $size] {
+    //     impl AsRef<[f64;$size]> for $type {
+    //         fn as_ref(&self) -> &[f64;$size] {
     //             unsafe { &*(self as *const Self as *const [f64; $size]) }
     //         }
-
-    //         #[inline]
-    //         fn as_array_mut(&mut self) -> &mut [f64; $size] {
+    //     }
+    //     impl AsRef<$type> for [f64;$size] {
+    //         fn as_ref(&self) -> &$type {
+    //             unsafe { &*(self as *const [f64;$size] as *const $type )}
+    //         }
+    //     }
+    //     impl AsMut<[f64;$size]> for $type {
+    //         fn as_mut(&mut self) -> &mut [f64;$size] {
     //             unsafe { &mut *(self as *mut Self as *mut [f64; $size]) }
     //         }
     //     }
-    // };
+    //     impl AsMut<$type> for [f64;$size] {
+    //         fn as_mut(&mut self) -> &mut $type {
+    //             unsafe { &mut *(self as *mut [f64; $size] as *mut $type) }
+    //         }
+    //     }
+    //     impl From<&[f64;$size]> for &$type {
+    //         fn from(array: &[f64;$size]) -> Self {
+    //             unsafe { *(array as *const [f64; $size] as *const Self) }
+    //         }
+    //     }
+    // }
+        impl ArrayEquivalent<$size> for $type {
+            #[inline]
+            fn from_array(array: &[f64; $size]) -> &Self {
+                unsafe { &*(array as *const [f64; $size] as *const Self) }
+            }
+
+            #[inline]
+            fn from_array_mut(array: &mut [f64; $size]) -> &mut Self {
+                unsafe { &mut *(array as *mut [f64; $size] as *mut Self) }
+            }
+
+            #[inline]
+            fn as_array(&self) -> &[f64; $size] {
+                unsafe { &*(self as *const Self as *const [f64; $size]) }
+            }
+
+            #[inline]
+            fn as_array_mut(&mut self) -> &mut [f64; $size] {
+                unsafe { &mut *(self as *mut Self as *mut [f64; $size]) }
+            }
+        }
+    };
 }
 pub trait ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
@@ -110,15 +144,12 @@ pub trait ConstitutiveModelFn<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
 >
-    where 
-        [f64;PARAMETERS]: AsRef<Self::Parameters>,
-        [f64;HISTORY]: AsRef<Self::History>,
 {
     const HISTORY_MAP: [(&'static str, Dim); N_HISTORY];
     const PARAMETERS_MAP: [(&'static str, Dim); N_PARAMETERS];
 
-    type History: AsRef<[f64;HISTORY]>;
-    type Parameters: AsRef<[f64;PARAMETERS]>;
+    type History: ArrayEquivalent<HISTORY>;
+    type Parameters: ArrayEquivalent<PARAMETERS>;
 
     fn evaluate(
         time: f64,
@@ -140,7 +171,7 @@ pub const fn check_constitutive_model_maps<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
->() -> bool {
+>() -> bool{
     let parameters = T::PARAMETERS_MAP;
     let history = T::HISTORY_MAP;
     let mut i: usize = 0;
@@ -158,58 +189,58 @@ pub const fn check_constitutive_model_maps<
     const_eq!(size_parameters, PARAMETERS) && const_eq!(size_history, HISTORY)
 }
 
-pub const fn get_parameter_index<
-    const STRESS_STRAIN: usize,
-    const TANGENT: usize,
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
-    T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
->(
-    name: &'static str,
-) -> (usize, usize)
-where
-    T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
-{
-    let parameters = T::PARAMETERS_MAP;
-    let mut i: usize = 0;
-    let mut start: usize = 0;
-    while i < N_PARAMETERS {
-        if const_eq!(parameters[i].0, name) {
-            return (start, parameters[i].1.len());
-        }
-        start += parameters[i].1.len();
-        i += 1;
-    }
-    panic!("Parameter not found in model");
-}
-pub const fn get_history_index<
-    const STRESS_STRAIN: usize,
-    const TANGENT: usize,
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
-    T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
->(
-    name: &'static str,
-) -> (usize, usize)
-where
-    T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
-{
-    let history = T::HISTORY_MAP;
-    let mut i: usize = 0;
-    let mut start: usize = 0;
-    while i < N_HISTORY {
-        if const_eq!(history[i].0, name) {
-            return (start, history[i].1.len());
-        }
-        start += history[i].1.len();
-        i += 1;
-    }
-    panic!("History not found in model");
-}
+// pub const fn get_parameter_index<
+//     const STRESS_STRAIN: usize,
+//     const TANGENT: usize,
+//     const N_HISTORY: usize,
+//     const HISTORY: usize,
+//     const N_PARAMETERS: usize,
+//     const PARAMETERS: usize,
+//     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
+// >(
+//     name: &'static str,
+// ) -> (usize, usize)
+// where
+//     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
+// {
+//     let parameters = T::PARAMETERS_MAP;
+//     let mut i: usize = 0;
+//     let mut start: usize = 0;
+//     while i < N_PARAMETERS {
+//         if const_eq!(parameters[i].0, name) {
+//             return (start, parameters[i].1.len());
+//         }
+//         start += parameters[i].1.len();
+//         i += 1;
+//     }
+//     panic!("Parameter not found in model");
+// }
+// pub const fn get_history_index<
+//     const STRESS_STRAIN: usize,
+//     const TANGENT: usize,
+//     const N_HISTORY: usize,
+//     const HISTORY: usize,
+//     const N_PARAMETERS: usize,
+//     const PARAMETERS: usize,
+//     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
+// >(
+//     name: &'static str,
+// ) -> (usize, usize)
+// where
+//     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
+// {
+//     let history = T::HISTORY_MAP;
+//     let mut i: usize = 0;
+//     let mut start: usize = 0;
+//     while i < N_HISTORY {
+//         if const_eq!(history[i].0, name) {
+//             return (start, history[i].1.len());
+//         }
+//         start += history[i].1.len();
+//         i += 1;
+//     }
+//     panic!("History not found in model");
+// }
 
 pub fn evaluate_model<
     const STRESS_STRAIN: usize,

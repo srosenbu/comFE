@@ -1,8 +1,8 @@
 use crate::consts::*;
 use crate::interfaces::*;
 use crate::mandel::*;
-//use crate::impl_array_equivalent;
-use crate::impl_from_array;
+use crate::impl_array_equivalent;
+//use crate::impl_from_array;
 use core::ffi::c_double;
 use nalgebra::{SMatrix, SVector, SVectorView, SVectorViewMut};
 use phf::{Map, phf_map};
@@ -36,11 +36,8 @@ struct MisesPlasticityHistory {
     plastic_strain: [f64; 6],
 }
 
-//impl_array_equivalent!(MisesPlasticityParameters, 4);
-//impl_array_equivalent!(MisesPlasticityHistory, 7);
-impl_from_array!(MisesPlasticityParameters, 4);
-impl_from_array!(MisesPlasticityHistory, 7);
-//let stuff = MisesPlasticityParameters::from(&[1.,2.,3.,4.]);
+impl_array_equivalent!(MisesPlasticityParameters, 4);
+impl_array_equivalent!(MisesPlasticityHistory, 7);
 
 impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
     const PARAMETERS_MAP: [(&'static str, Dim); 4] = [
@@ -67,19 +64,17 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
         history: &mut [f64; 7],
         parameters: &[f64; 4],
     ) {
-        let parameters_: &MisesPlasticityParameters = parameters.as_ref();
+        let parameters_  = Self::Parameters::from_array(parameters);
         let mu = parameters_.mu;
         let kappa = parameters_.kappa;
         let y_0 = parameters_.y_0;
         let h = parameters_.h;
 
-        let a: [f64;4] = [1.0, 0.0, 0.0, 0.0];
-        let b : &[f64;4] = a.as_ref();
         // Unpack history
-        let history_: &MisesPlasticityHistory= history.as_ref();
+        let history_ = Self::History::from_array_mut(history);
         let alpha = history_.alpha;
         let mut plastic_strain_vec =
-            SVectorView::<f64, 6>::from_array(&history_.plastic_strain);
+            SVectorViewMut::<f64, 6>::from_array(&mut history_.plastic_strain);
 
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);

@@ -16,11 +16,13 @@ const PARAMETERS_MAP_: [(&'static str, Dim); 2] = [("mu", Dim::Scalar), ("lambda
 #[repr(C)]
 struct LinearElasticity3D();
 
+
 create_struct_with_field_names!(
     LinearElasticityParameters,
     [(mu, f64),
     (lambda, f64)]
 );
+
 create_struct_with_field_names!(
     LinearElasticityHistory,
     []
