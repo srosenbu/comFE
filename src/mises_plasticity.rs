@@ -1,5 +1,5 @@
 use crate::consts::*;
-use crate::{create_struct_with_field_names, q_dim_data_type};
+use crate::{create_history_parameter_struct, q_dim_data_type};
 use crate::interfaces::*;
 use crate::mandel::*;
 use crate::impl_array_equivalent;
@@ -23,8 +23,9 @@ const _: () = assert!(check_constitutive_model_maps::<
 #[repr(C)]
 struct MisesPlasticity3D();
 
-create_struct_with_field_names!(
+create_history_parameter_struct!(
     MisesPlasticityParameters,
+    4,
     4,
     [
         (mu, (QDim::Scalar)),
@@ -33,9 +34,10 @@ create_struct_with_field_names!(
         (h, (QDim::Scalar))
     ]
 );
-create_struct_with_field_names!(
+create_history_parameter_struct!(
     MisesPlasticityHistory,
     2,
+    7,
     [
         (alpha, (QDim::Scalar)),
         (plastic_strain, (QDim::RotatableVector(6)))
@@ -43,12 +45,9 @@ create_struct_with_field_names!(
 );
 
 
-impl_array_equivalent!(MisesPlasticityParameters, 4);
-impl_array_equivalent!(MisesPlasticityHistory, 7);
-
 impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
-    const PARAMETERS_MAP: [(&'static str, QDim); 4] = MisesPlasticityParameters::FIELDS;
-    const HISTORY_MAP: [(&'static str, QDim); 2] = MisesPlasticityHistory::FIELDS;
+    //const PARAMETERS_MAP: [(&'static str, QDim); 4] = MisesPlasticityParameters::MAP;
+    //const HISTORY_MAP: [(&'static str, QDim); 2] = MisesPlasticityHistory::MAP;
 
     type History = MisesPlasticityHistory;
     type Parameters = MisesPlasticityParameters;

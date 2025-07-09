@@ -1,5 +1,5 @@
 use crate::consts::*;
-use crate::{impl_array_equivalent, create_struct_with_field_names, q_dim_data_type};
+use crate::{impl_array_equivalent, create_history_parameter_struct, q_dim_data_type};
 use crate::interfaces::*;
 use crate::mandel::*;
 use core::ffi::c_double;
@@ -11,31 +11,30 @@ use std::collections::HashMap;
 
 const _: () = assert!(check_constitutive_model_maps::<6,36,0,0,2,2,LinearElasticity3D>());
 
-const PARAMETERS_MAP_: [(&'static str, QDim); 2] = [("mu", QDim::Scalar), ("lambda", QDim::Scalar)];
 
 #[repr(C)]
 struct LinearElasticity3D();
 
 
-create_struct_with_field_names!(
+create_history_parameter_struct!(
     LinearElasticityParameters,
+    2,
     2,
     [(mu, (QDim::Scalar)),
     (kappa, (QDim::Scalar))]
 );
 
-create_struct_with_field_names!(
+create_history_parameter_struct!(
     LinearElasticityHistory,
+    0,
     0,
     []
 );
-impl_array_equivalent!(LinearElasticityParameters, 2);
-impl_array_equivalent!(LinearElasticityHistory, 0);
 
 impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
 
-    const PARAMETERS_MAP: [(&'static str, QDim); 2] = LinearElasticityParameters::FIELDS;
-    const HISTORY_MAP: [(&'static str, QDim); 0] = LinearElasticityHistory::FIELDS;
+    //const PARAMETERS_MAP: [(&'static str, QDim); 2] = LinearElasticityParameters::MAP;
+    //const HISTORY_MAP: [(&'static str, QDim); 0] = LinearElasticityHistory::MAP;
 
     type History = LinearElasticityHistory;
     type Parameters = LinearElasticityParameters;

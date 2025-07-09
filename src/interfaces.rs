@@ -8,6 +8,7 @@ use phf::{Map, OrderedMap};
 use serde::Serialize;
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub enum QDim {
     Scalar,
     Vector(usize),
@@ -41,25 +42,52 @@ macro_rules! q_dim_data_type {
     ((QDim::Scalar)) => {
         f64
     };
-    ((QDim::Vector($size:expr))) => 
-        {[f64; $size]};
-    ((QDim::RotatableVector($size:expr))) => 
-        {[f64; $size]};
-    ((QDim::Matrix($size:expr))) => 
-        {[f64; $size * $size]};
-    ((QDim::RotatableMatrix($size:expr))) => 
-        {[f64; $size * $size]};
+    ((QDim::Vector($size:expr))) => {
+        [f64; $size]
+    };
+    ((QDim::RotatableVector($size:expr))) => {
+        [f64; $size]
+    };
+    ((QDim::Matrix($size:expr))) => {
+        [f64; $size * $size]
+    };
+    ((QDim::RotatableMatrix($size:expr))) => {
+        [f64; $size * $size]
+    };
 }
-pub trait ArrayEquivalent<const N:usize> : Sized{
+pub trait ArrayEquivalent<const N: usize>: Sized {
     fn from_array(array: &[f64; N]) -> &Self;
     fn from_array_mut(array: &mut [f64; N]) -> &mut Self;
 
     fn as_array(&self) -> &[f64; N];
     fn as_array_mut(&mut self) -> &mut [f64; N];
+}
+pub trait StaticMap<const N: usize, T>
+where
+    T: Copy,
+{
+    const MAP: [(&'static str, T); N];
 
+    //Todo: When constant traits become a thing, make this a constant function
+    fn get(name: &str) -> Option<T> {
+        for i in 0..N {
+            if eq_str(Self::MAP[i].0, name) {
+                return Some(Self::MAP[i].1);
+            }
+        }
+        None
+    }
+    fn get_index(name: &str) -> Option<usize> {
+        for i in 0..N {
+            if eq_str(Self::MAP[i].0, name) {
+                return Some(i);
+            }
+        }
+        None
+    }
 }
 
-impl<const N:usize> ArrayEquivalent<N> for [f64;N] {
+impl<const N: usize> ArrayEquivalent<N> for [f64; N] {
     #[inline]
     fn from_array(array: &[f64; N]) -> &Self {
         array
@@ -80,29 +108,36 @@ impl<const N:usize> ArrayEquivalent<N> for [f64;N] {
         self
     }
 }
+impl<const N: usize> StaticMap<1, QDim> for [f64; N] {
+    const MAP: [(&'static str, QDim); 1] = [("all_fields", QDim::Vector(N))];
+}
 
 #[macro_export]
-macro_rules! create_struct_with_field_names {
-    ($struct_name:ident, $n:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
+macro_rules! create_history_parameter_struct {
+    ($struct_name:ident, $n:expr, $size:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
         struct $struct_name {
             $(
                 $field_name: q_dim_data_type!($qdim),
             )*
         }
 
-        impl $struct_name {
-            pub const FIELDS: [(&'static str, QDim); $n] = [
+        impl StaticMap<$n, QDim> for $struct_name {
+            const MAP: [(&'static str, QDim); $n] = [
                 $((stringify!($field_name), $qdim)),*
             ];
         }
+        impl_array_equivalent!($struct_name, $size);
     };
 }
 
-
-#[macro_export] macro_rules! impl_array_equivalent {
+#[macro_export]
+macro_rules! impl_array_equivalent {
     ($type:ty, $size:expr) => {
-        const _: () = assert!(std::mem::size_of::<[f64; $size]>() == std::mem::size_of::<$type>(), "size mismatch");
-        
+        const _: () = assert!(
+            std::mem::size_of::<[f64; $size]>() == std::mem::size_of::<$type>(),
+            "size mismatch"
+        );
+
         impl ArrayEquivalent<$size> for $type {
             #[inline]
             fn from_array(array: &[f64; $size]) -> &Self {
@@ -134,11 +169,8 @@ pub trait ConstitutiveModelFn<
     const PARAMETERS: usize,
 >
 {
-    const HISTORY_MAP: [(&'static str, QDim); N_HISTORY];
-    const PARAMETERS_MAP: [(&'static str, QDim); N_PARAMETERS];
-
-    type History: ArrayEquivalent<HISTORY>;
-    type Parameters: ArrayEquivalent<PARAMETERS>;
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
 
     fn evaluate(
         time: f64,
@@ -150,7 +182,6 @@ pub trait ConstitutiveModelFn<
         history: &mut [f64; HISTORY],
         parameters: &[f64; PARAMETERS],
     );
-
 }
 
 pub const fn check_constitutive_model_maps<
@@ -161,9 +192,9 @@ pub const fn check_constitutive_model_maps<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
     T: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
->() -> bool{
-    let parameters = T::PARAMETERS_MAP;
-    let history = T::HISTORY_MAP;
+>() -> bool {
+    let parameters = T::Parameters::MAP;
+    let history = T::History::MAP;
     let mut i: usize = 0;
     let mut size_parameters: usize = 0;
     let mut size_history: usize = 0;
