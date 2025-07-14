@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 
 use crate::consts::*;
 use konst::{const_eq, eq_str};
-use nalgebra::{SMatrix, SVector, SVectorView, Scalar};
+use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut, Scalar};
 use phf::{Map, OrderedMap};
 use serde::Serialize;
 
@@ -43,19 +43,20 @@ macro_rules! q_dim_data_type {
         f64
     };
     ((QDim::Vector($size:expr))) => {
-        [f64; $size]
+        SVector<f64, $size>
     };
     ((QDim::RotatableVector($size:expr))) => {
-        [f64; $size]
+        SVector<f64, $size>
     };
     ((QDim::Matrix($size:expr))) => {
-        [f64; $size * $size]
+        SMatrix<f64, $size, $size>
     };
     ((QDim::RotatableMatrix($size:expr))) => {
-        [f64; $size * $size]
+        SMatrix<f64, $size, $size>
     };
 }
 pub trait ArrayEquivalent<const N: usize>: Sized {
+    
     fn from_array(array: &[f64; N]) -> &Self;
     fn from_array_mut(array: &mut [f64; N]) -> &mut Self;
 
@@ -85,6 +86,7 @@ where
         }
         None
     }
+    
 }
 
 impl<const N: usize> ArrayEquivalent<N> for [f64; N] {
@@ -181,6 +183,28 @@ pub trait ConstitutiveModelFn<
         tangent: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
         history: &mut [f64; HISTORY],
         parameters: &[f64; PARAMETERS],
+    );
+}
+pub trait ConstitutiveModel<
+    const STRESS_STRAIN: usize,
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>
+{
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+
+    fn evaluate(
+        time: f64,
+        del_time: f64,
+        strain: SVectorView<f64, STRESS_STRAIN>,
+        del_strain: SVectorView<f64, STRESS_STRAIN>,
+        stress: &mut SVectorViewMut<f64, STRESS_STRAIN>,
+        tangent: Option<&mut SMatrixViewMut<f64, STRESS_STRAIN, STRESS_STRAIN>>,
+        history: &mut Self::History,
+        parameters: &Self::Parameters,
     );
 }
 

@@ -11,17 +11,17 @@ pub trait Mandel<const DIM: usize> {
 
     fn trace_dev(&self) -> (f64, SVector<f64,DIM>);
 
-    fn I_1(&self) -> f64 {
+    fn i_1(&self) -> f64 {
         self.trace()
     }
 
-    fn J_2(&self) -> f64 {
+    fn j_2(&self) -> f64 {
         let (_, dev) = self.trace_dev();
         0.5 * dev.norm_squared()
     }
     
     fn mises_norm(&self) -> f64 {
-        let j_2 = self.J_2();
+        let j_2 = self.j_2();
         (3.0 * j_2).sqrt()
     }
     fn elasticty(strain: Self, mu:f64, kappa:f64) ->SVector<f64,DIM>;
