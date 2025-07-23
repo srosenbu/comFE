@@ -1,11 +1,11 @@
 use crate::QDim; // Ensure QDim is imported from the correct module
+use crate::mandel::*;
 use crate::{
     create_history_parameter_struct, impl_array_equivalent,
     interfaces::{ArrayEquivalent, ConstitutiveModelFn, StaticMap},
     q_dim_data_type,
 };
 use nalgebra::{SMatrix, SMatrixView, SVector, SVectorView};
-use crate::mandel::*;
 pub trait Plasticity<
     const STRESS_STRAIN: usize,
     const N_PARAMETERS: usize,
@@ -27,11 +27,11 @@ pub trait Plasticity<
     fn df_dsigma(&self) -> SVector<f64, STRESS_STRAIN>;
     fn df_dkappa(&self) -> SVector<f64, KAPPA>;
     fn g(&self) -> SVector<f64, STRESS_STRAIN>;
-    fn dg_dkappa(&self) -> SVector<f64, STRESS_STRAIN>;
+    fn dg_dkappa(&self) -> SMatrix<f64, STRESS_STRAIN, KAPPA>;
     fn dg_dsigma(&self) -> SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
     fn k(&self) -> SVector<f64, KAPPA>;
-    fn dk_dsigma(&self) -> SVector<f64, STRESS_STRAIN>;
-    fn dk_dkappa(&self) -> f64;
+    fn dk_dsigma(&self) -> SMatrix<f64, KAPPA, STRESS_STRAIN>;
+    fn dk_dkappa(&self) -> SMatrix<f64, KAPPA, KAPPA>;
     fn elastic_tangent(&self) -> SMatrixView<f64, STRESS_STRAIN, STRESS_STRAIN>;
     fn elastic_tangent_inv(&self) -> SMatrixView<f64, STRESS_STRAIN, STRESS_STRAIN>;
     fn del_plastic_strain(&self) -> SVector<f64, STRESS_STRAIN>;
@@ -85,8 +85,9 @@ impl<
         let history_ = IsotropicPlasticityHistory3D::from_array_mut(history);
         let mut model = MODEL::new(parameters_);
 
-        let sigma_0 = SVectorView::<f64, 6>::from_array(stress);
-        let del_eps = SVectorView::<f64, 6>::from_array(del_strain);
+        let sigma_0 = SVectorView::<f64, 6>::from_array(stress).to_owned();
+        let mut sigma_1 = SVector::<f64, 6>::zeros();
+        let del_eps = SVectorView::<f64, 6>::from_array(del_strain).to_owned();
         let kappa = SVector::<f64, 1>::from_element(0.0); // Assuming kappa is a scalar
 
         model.set_model_state(&sigma_0, &sigma_1, &del_eps, &kappa);
