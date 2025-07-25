@@ -1,3 +1,5 @@
+import math
+
 import basix
 import comfe as co
 import dolfinx as df
@@ -189,6 +191,7 @@ def test_uniaxial_strain_3D(model, parameters) -> None:
     u_max = []
     damage = []
     eps_pl = []
+
     while solver.t < t_end:
         v_bc.value = v(solver.t)
         try:
@@ -211,29 +214,30 @@ def test_uniaxial_strain_3D(model, parameters) -> None:
     pressure = -(stress @ mandel_identity).flatten() / 3.0
     stress_dev = stress + mandel_identity * pressure.reshape(-1, 1)
     sig_1 = stress[:, 0]
+    eps_1 = np.array(u_max) / 1.0  # box length is 1.0
     t = np.array(t)
     s_eq = np.sqrt(3.0 / 2.0 * (stress_dev**2).sum(axis=1))
     ##print(stress[::100])
     # print(sig_1[::100])
     # print(t[::100])
-    plt.plot(t, s_eq, label="Equivalent Stress")
-    plt.xlabel("Time [s]")
+    plt.plot(eps_1, s_eq, label="Equivalent Stress")
+    plt.xlabel("Strain [-]")
     plt.ylabel("Equivalent Stress [MPa]")
     plt.show()
-    plt.plot(t, pressure, label="Pressure")
-    plt.xlabel("Time [s]")
+    plt.plot(eps_1, pressure, label="Pressure")
+    plt.xlabel("Strain [-]")
     plt.ylabel("Pressure [MPa]")
     plt.show()
-    plt.plot(t, damage, label="Damage")
-    plt.xlabel("Time [s]")
+    plt.plot(eps_1, damage, label="Damage")
+    plt.xlabel("Strain [-]")
     plt.ylabel("Damage")
     plt.show()
-    plt.plot(t, sig_1, label="sigma_axial")
-    plt.xlabel("Time [s]")
+    plt.plot(eps_1, sig_1, label="sigma_axial")
+    plt.xlabel("Strain [-]")
     plt.ylabel("Stress axial direction [MPa]")
     plt.show()
-    plt.plot(t, eps_pl, label="Equivalent Plastic Strain")
-    plt.xlabel("Time [s]")
+    plt.plot(eps_1, eps_pl, label="Equivalent Plastic Strain")
+    plt.xlabel("Strain [-]")
     plt.ylabel("Equivalent Plastic Strain")
     plt.show()
 
@@ -532,9 +536,15 @@ if __name__ == "__main__":
     #     "h": [2000.0, "MPa"],
     # }
     # test_uniaxial_strain_3D(co.laws.PyUniaxialStressEngelen3D, parameters_engelen)
+    b_by_a_goal = (1 / 2.2) * (1 / 3) * math.sqrt(3 / 2) ** 3
+    a = 5111012.97882567  # Pa
+    # a = 1.0
+    b = 1277753.2447064174  # Pa
+    # b = b_by_a_goal
+    b_by_a = b / a
     parameters_drucker_prager = {
-        "a_y": [5111012.97882567, "Pa"],
-        "b_y": [1277753.2447064174, "Pa"],
+        "a_y": [a, "Pa"],
+        "b_y": [b, "Pa"],
         "d_y": [15311012.97882567, "Pa"],
         "e_f": [0.002, ""],
         "h": [00.0, ""],
@@ -545,8 +555,9 @@ if __name__ == "__main__":
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
-        "radial_factor": [0.0, ""],
+        "radial_factor": [0.999, ""],
     }
+
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager, 0.1)
     # test_uniaxial_strain_3D(co.laws.PyDruckerPragerClassic3D, parameters_drucker_prager)
     test_uniaxial_strain_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager)
