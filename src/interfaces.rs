@@ -120,7 +120,7 @@ macro_rules! create_history_parameter_struct {
     ($struct_name:ident, $n:expr, $size:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
         #[repr(C)]
         #[derive(Copy, Clone, Debug)]
-        struct $struct_name {
+        pub struct $struct_name {
             $(
                 $field_name: q_dim_data_type!($qdim),
             )*

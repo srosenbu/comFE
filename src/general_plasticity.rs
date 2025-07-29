@@ -1,3 +1,4 @@
+use crate::consts::id;
 use crate::QDim; // Ensure QDim is imported from the correct module
 use crate::mandel::*;
 use crate::{
@@ -24,17 +25,17 @@ pub trait Plasticity<
         kappa: &SVector<f64, KAPPA>,
     );
     fn f(&self) -> f64;
-    fn df_dsigma(&self) -> SVector<f64, STRESS_STRAIN>;
-    fn df_dkappa(&self) -> SVector<f64, KAPPA>;
-    fn g(&self) -> SVector<f64, STRESS_STRAIN>;
-    fn dg_dkappa(&self) -> SMatrix<f64, STRESS_STRAIN, KAPPA>;
-    fn dg_dsigma(&self) -> SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
-    fn k(&self) -> SVector<f64, KAPPA>;
-    fn dk_dsigma(&self) -> SMatrix<f64, KAPPA, STRESS_STRAIN>;
-    fn dk_dkappa(&self) -> SMatrix<f64, KAPPA, KAPPA>;
-    fn elastic_tangent(&self) -> SMatrixView<f64, STRESS_STRAIN, STRESS_STRAIN>;
-    fn elastic_tangent_inv(&self) -> SMatrixView<f64, STRESS_STRAIN, STRESS_STRAIN>;
-    fn del_plastic_strain(&self) -> SVector<f64, STRESS_STRAIN>;
+    fn df_dsigma(&self) -> &SVector<f64, STRESS_STRAIN>;
+    fn df_dkappa(&self) -> &SVector<f64, KAPPA>;
+    fn g(&self) -> &SVector<f64, STRESS_STRAIN>;
+    fn dg_dkappa(&self) -> &SMatrix<f64, STRESS_STRAIN, KAPPA>;
+    fn dg_dsigma(&self) -> &SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
+    fn k(&self) -> &SVector<f64, KAPPA>;
+    fn dk_dsigma(&self) -> &SMatrix<f64, KAPPA, STRESS_STRAIN>;
+    fn dk_dkappa(&self) -> &SMatrix<f64, KAPPA, KAPPA>;
+    fn elastic_tangent(&self) -> &SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
+    fn elastic_tangent_inv(&self) -> &SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
+    fn del_plastic_strain(&self) -> &SVector<f64, STRESS_STRAIN>;
 }
 pub trait IsotropicPlasticity<
     const STRESS_STRAIN: usize,
@@ -72,8 +73,8 @@ impl<
     type Parameters = MODEL::Parameters;
     #[inline]
     fn evaluate(
-        _time: f64,
-        _del_time: f64,
+        time: f64,
+        del_time: f64,
         _strain: &[f64; 6],
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
@@ -81,30 +82,161 @@ impl<
         history: &mut [f64; 7],
         parameters: &[f64; PARAMETERS],
     ) {
+        const I_6: SMatrix<f64, 6, 6> = id::<6>();
         let parameters_ = Self::Parameters::from_array(parameters);
         let history_ = IsotropicPlasticityHistory3D::from_array_mut(history);
         let mut model = MODEL::new(parameters_);
 
-        let sigma_0 = SVectorView::<f64, 6>::from_array(stress).to_owned();
-        let mut sigma_1 = SVector::<f64, 6>::zeros();
-        let del_eps = SVectorView::<f64, 6>::from_array(del_strain).to_owned();
-        let kappa = SVector::<f64, 1>::from_element(0.0); // Assuming kappa is a scalar
+        
 
-        model.set_model_state(&sigma_0, &sigma_1, &del_eps, &kappa);
+        let del_eps = SVector::<f64, 6>::from_column_slice(del_strain);
+        let sigma_0 = SVector::<f64, 6>::from_column_slice(stress);
+        let sigma_tr = model.elastic_tangent()*del_eps + sigma_0;
+        
+        let alpha_0 = SVector::<f64, 1>::from_element(history_.alpha);
+        let mut alpha_1 = alpha_0.clone();
+        let mut sigma_1 = sigma_tr.clone();
+        model.set_model_state(&sigma_0, &sigma_tr, &del_eps, &alpha_0);
 
         let f = model.f();
         if f <= 0.0 {
-            *stress = sigma_1.into();
+            *stress = sigma_tr.data.0[0];
             if let Some(tangent) = tangent {
-                *tangent = model.elastic_tangent().into();
+                *tangent = model.elastic_tangent().data.0;
             }
             return;
-        }
+        } else {
+            let mut del_lambda = 0.0;
+            let mut sol_0 = SVector::<f64, 8>::from_element(0.0); //make first test fail
+            let mut sol_1 = SVector::<f64, 8>::from([
+                sigma_tr[0],
+                sigma_tr[1],
+                sigma_tr[2],
+                sigma_tr[3],
+                sigma_tr[4],
+                sigma_tr[5],
+                alpha_0[0],
+                0.0,
+            ]);
+            let mut res_sigma =
+                sigma_tr - sigma_0 - del_lambda * model.elastic_tangent() * model.g();
+            let mut res_kappa = alpha_1 - alpha_0 - model.k();
+            let mut res_f = model.f();
 
-        // Update stress and tangent
-        *stress = (sigma_1 - model.del_plastic_strain()).into();
-        if let Some(tangent) = tangent {
-            *tangent = model.elastic_tangent().into();
+            let mut dres = SMatrix::<f64, 8, 8>::zeros();
+
+            let mut res = SVector::<f64, 8>::from([
+                res_sigma[0],
+                res_sigma[1],
+                res_sigma[2],
+                res_sigma[3],
+                res_sigma[4],
+                res_sigma[5],
+                res_kappa[0],
+                res_f,
+            ]);
+            let mut i = 0;
+            let maxit = 100;
+            //println!("residual: {}", res);
+            let res_sigma_0_norm = res_sigma.norm();
+            let res_kappa_0_norm = res_kappa.abs();
+            let res_f_0_norm = res_f.abs();
+            let mut sigma_prev = sigma_0;
+            let mut alpha_prev: SVector<f64, 1> = sol_0.fixed_view::<1, 1>(6, 0).into();
+            let mut del_lambda_prev = sol_0[7];
+            while (res_sigma.norm() > 1e-6 * res_sigma_0_norm
+                || res_kappa.abs() > 1e-6 * res_kappa_0_norm
+                || res_f.abs() > 1e-6 * res_f_0_norm)
+                || ((sigma_1 - sigma_prev).norm() > 1e-6 * sigma_1.norm()
+                    || (alpha_1 - alpha_prev).norm() > 1e-6 * alpha_1.norm()
+                    || (del_lambda - del_lambda_prev).abs() > 1e-6 * del_lambda.abs())
+            {
+                sol_0 = sol_1;
+
+                // fill dres_sigma_dsigma
+                dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
+                    &(-I_6 - model.elastic_tangent() * del_lambda * model.dg_dsigma()),
+                );
+                //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+                dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
+                    &(-model.elastic_tangent() * del_lambda * model.dg_dkappa()),
+                );
+                //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+                dres.fixed_view_mut::<6, 1>(0, 7)
+                    .copy_from(&(-model.elastic_tangent() * model.g()));
+
+                //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+                dres.fixed_view_mut::<1, 6>(6, 0)
+                    .copy_from_slice((-model.dk_dsigma()).as_slice());
+                //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+                dres.fixed_view_mut::<1, 1>(6, 6)
+                    .copy_from(&(SVector::<f64, 1>::from_element(1.0) - model.dk_dkappa()));
+                //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+                dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
+
+                //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+                dres.fixed_view_mut::<1, 6>(7, 0)
+                    .copy_from(&model.df_dsigma().transpose());
+                //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+                dres.fixed_view_mut::<1, 1>(7, 6)
+                    .copy_from(model.df_dkappa());
+                //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+                dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
+
+                let lu = dres.lu();
+                let result = lu.solve(&res);
+                match result {
+                    Some(sol) => sol_1 = sol_0 - sol,
+                    None => {
+                        panic!(
+                            "Plasticity3D: Newton-Raphson failed to solve system {}",
+                            dres
+                        );
+                    }
+                }
+
+                // extract solution and calcualte new residual
+                sigma_1 = sol_1.fixed_view::<6, 1>(0, 0).into();
+                alpha_1 = sol_1.fixed_view::<1, 1>(6, 0).into();
+                del_lambda = sol_1[7];
+
+                sigma_prev = sol_0.fixed_view::<6, 1>(0, 0).into();
+                alpha_prev = sol_0.fixed_view::<1, 1>(6, 0).into();
+                del_lambda_prev = sol_0[7];
+
+                model.set_model_state(
+                    &sigma_0,
+                    &sigma_1,
+                    &del_eps,
+                    &alpha_1
+                );
+
+                res_sigma =
+                    sigma_tr - sigma_1 - del_lambda * model.elastic_tangent() * model.g();
+                res_kappa = alpha_1 - alpha_0 - model.k();
+                res_f = model.f();
+                res = SVector::<f64, 8>::from([
+                    res_sigma[0],
+                    res_sigma[1],
+                    res_sigma[2],
+                    res_sigma[3],
+                    res_sigma[4],
+                    res_sigma[5],
+                    res_kappa[0],
+                    res_f,
+                ]);
+                if i > maxit {
+                    panic!("Plasticity3D: Newton-Raphson did not converge. residual: {}, solution change: {}", res.norm(), (sol_1 - sol_0).norm() / sol_1.norm());
+                }
+                i += 1;
+            }
+            // Update the stress and history
+            *stress = sigma_1.data.0[0];
+            history_.alpha = alpha_1[0];
+            history_.plastic_strain += model.del_plastic_strain();
+            if let Some(tangent) = tangent {
+                *tangent = model.elastic_tangent().data.0;
+            }
         }
     }
 }
