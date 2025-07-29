@@ -4,16 +4,16 @@ use crate::interfaces::*;
 use crate::mandel::*;
 use core::ffi::c_double;
 use nalgebra::{SMatrix, SVector, SVectorView, SVectorViewMut};
-use phf::{phf_map, Map};
-use serde::Deserialize;
-use serde::Serialize;
+//use phf::{phf_map, Map};
+//use serde::Deserialize;
+//use serde::Serialize;
 use std::collections::HashMap;
 
 const _: () = assert!(check_constitutive_model_maps::<6,36,0,0,2,2,LinearElasticity3D>());
 
 
 #[repr(C)]
-struct LinearElasticity3D();
+pub struct LinearElasticity3D();
 
 
 create_history_parameter_struct!(
@@ -58,10 +58,10 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
 
-        stress_vec += (del_strain_vec.trace() * lambda) * SYM_ID_6 + (2.0 * mu) * del_strain_vec;
+        stress_vec += (del_strain_vec.trace() * lambda) * const{sym_id::<6>()} + (2.0 * mu) * del_strain_vec;
 
         if let Some(tangent) = tangent {
-            let tangent_mat = SYM_ID_6_OUTER_SYM_ID_6 * lambda + (2.0 * mu) * ID_6;
+            let tangent_mat = const{sym_id_outer_sym_id::<6>()} * lambda + (2.0 * mu) * const{id::<6>()};
             *tangent = tangent_mat.data.0;
         }
     }

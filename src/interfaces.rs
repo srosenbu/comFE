@@ -1,11 +1,14 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 
-use crate::consts::*;
+use crate::{
+    consts::*,
+    mandel::{MandelView, MandelViewMut},
+};
 use konst::{const_eq, eq_str};
-use nalgebra::{SMatrix, SVector, SVectorView, Scalar};
-use phf::{Map, OrderedMap};
-use serde::Serialize;
+use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut, Scalar};
+//use phf::{Map, OrderedMap};
+//use serde::Serialize;
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -43,16 +46,16 @@ macro_rules! q_dim_data_type {
         f64
     };
     ((QDim::Vector($size:expr))) => {
-        [f64; $size]
+        SVector<f64, $size>
     };
     ((QDim::RotatableVector($size:expr))) => {
-        [f64; $size]
+        SVector<f64, $size>
     };
     ((QDim::Matrix($size:expr))) => {
-        [f64; $size * $size]
+        SMatrix<f64, $size, $size>
     };
     ((QDim::RotatableMatrix($size:expr))) => {
-        [f64; $size * $size]
+        SMatrix<f64, $size, $size>
     };
 }
 pub trait ArrayEquivalent<const N: usize>: Sized {
@@ -115,6 +118,8 @@ impl<const N: usize> StaticMap<1, QDim> for [f64; N] {
 #[macro_export]
 macro_rules! create_history_parameter_struct {
     ($struct_name:ident, $n:expr, $size:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug)]
         struct $struct_name {
             $(
                 $field_name: q_dim_data_type!($qdim),
@@ -161,6 +166,33 @@ macro_rules! impl_array_equivalent {
         }
     };
 }
+pub trait ConstitutiveModel<
+    const STRESS_STRAIN: usize,
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>
+where
+    Self: Sized,
+{
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+
+    fn new(parameters: &Self::Parameters) -> Self;
+
+    fn evaluate(
+        &self,
+        time: f64,
+        del_time: f64,
+        strain: &[f64; STRESS_STRAIN],
+        del_strain: &[f64; STRESS_STRAIN],
+        stress: &mut [f64; STRESS_STRAIN],
+        tangent: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
+        history: &mut [f64; HISTORY],
+        parameters: &[f64; PARAMETERS],
+    );
+}
 pub trait ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
     const N_HISTORY: usize,
@@ -179,6 +211,110 @@ pub trait ConstitutiveModelFn<
         del_strain: &[f64; STRESS_STRAIN],
         stress: &mut [f64; STRESS_STRAIN],
         tangent: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
+        history: &mut [f64; HISTORY],
+        parameters: &[f64; PARAMETERS],
+    );
+}
+pub trait ConstitutiveModelFunction<
+    const STRESS_STRAIN: usize,
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>
+{
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim> + Copy;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim> + Copy;
+
+    fn evaluate<const TANGENT: bool>(
+        time: f64,
+        del_time: f64,
+        strain: SVector<f64, STRESS_STRAIN>,
+        del_strain: SVector<f64, STRESS_STRAIN>,
+        stress: SVector<f64, STRESS_STRAIN>,
+        history: Self::History,
+        parameters: Self::Parameters,
+    ) -> (
+        SVector<f64, STRESS_STRAIN>,
+        Option<SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>>,
+        Self::History,
+    );
+}
+
+pub fn input_as_nalgebra<
+    'a,
+    const STRESS_STRAIN: usize,
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>(
+    strain: &'a [f64; STRESS_STRAIN],
+    del_strain: &'a [f64; STRESS_STRAIN],
+    stress: &'a mut [f64; STRESS_STRAIN],
+    tangent: Option<&'a mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
+) -> (
+    SVectorView<'a, f64, STRESS_STRAIN>,
+    SVectorView<'a, f64, STRESS_STRAIN>,
+    SVectorViewMut<'a, f64, STRESS_STRAIN>,
+    Option<SMatrixViewMut<'a, f64, STRESS_STRAIN, STRESS_STRAIN>>,
+)
+where
+    SVectorView<'a, f64, STRESS_STRAIN>: MandelView<'a, STRESS_STRAIN>,
+    SVectorViewMut<'a, f64, STRESS_STRAIN>: MandelViewMut<'a, STRESS_STRAIN>,
+{
+    let strain_view = SVectorView::from_array(strain);
+    let del_strain_view = SVectorView::from_array(del_strain);
+    let stress_view_mut = SVectorViewMut::from_array(stress);
+
+    let tangent_view_mut = tangent.map(|t| SMatrixViewMut::from_slice(t.as_flattened_mut()));
+
+    (
+        strain_view,
+        del_strain_view,
+        stress_view_mut,
+        tangent_view_mut,
+    )
+}
+
+pub trait ConstitutiveModelFn3D<
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>
+{
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+
+    fn evaluate(
+        time: f64,
+        del_time: f64,
+        strain: &[f64; 6],
+        del_strain: &[f64; 6],
+        stress: &mut [f64; 6],
+        tangent: Option<&mut [[f64; 6]; 6]>,
+        history: &mut [f64; HISTORY],
+        parameters: &[f64; PARAMETERS],
+    );
+}
+pub trait ConstitutiveModelFnPlaneStrain<
+    const N_HISTORY: usize,
+    const HISTORY: usize,
+    const N_PARAMETERS: usize,
+    const PARAMETERS: usize,
+>
+{
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+
+    fn evaluate(
+        time: f64,
+        del_time: f64,
+        strain: &[f64; 4],
+        del_strain: &[f64; 4],
+        stress: &mut [f64; 4],
+        tangent: Option<&mut [[f64; 4]; 4]>,
         history: &mut [f64; HISTORY],
         parameters: &[f64; PARAMETERS],
     );
@@ -212,14 +348,12 @@ pub const fn check_constitutive_model_maps<
 
 pub fn evaluate_model<
     const STRESS_STRAIN: usize,
-    const TANGENT: usize,
     const N_HISTORY: usize,
     const HISTORY: usize,
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
-    MODEL,
+    MODEL: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS> + Sized,
 >(
-    model: MODEL,
     time: f64,
     del_time: f64,
     strain: &[f64],
@@ -228,9 +362,7 @@ pub fn evaluate_model<
     tangent: Option<&mut [f64]>,
     history: &mut [f64],
     parameters: &[f64],
-) where
-    MODEL: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
-{
+) {
     let parameters: [f64; PARAMETERS] = parameters
         .try_into()
         .expect(&format!("Length of parameters slice does not match the expected length. Expected: {}, got: {}.",
@@ -298,94 +430,3 @@ pub fn evaluate_model<
         );
     }
 }
-// pub fn evaluate_model_from_maps<
-//     const STRESS_STRAIN: usize,
-//     const TANGENT: usize,
-//     const N_HISTORY: usize,
-//     const HISTORY: usize,
-//     const N_PARAMETERS: usize,
-//     const PARAMETERS: usize,
-//     MODEL,
-// >(
-//     model: MODEL,
-//     time: f64,
-//     del_time: f64,
-//     del_strain: &[f64],
-//     stress: &mut [f64],
-//     tangent: Option<&mut [f64]>,
-//     history: HashMap<&str,&mut [f64]>,
-//     parameters: &[f64],
-// ) where
-//     MODEL: ConstitutiveModelFn<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS>,
-// {
-//     let parameters: [f64; PARAMETERS] = parameters
-//         .try_into()
-//         .expect("Slice length does not match array length");
-
-//     let (stress_, stress_rest) = stress.as_chunks_mut::<STRESS_STRAIN>();
-//     let (del_strain_, del_strain_rest) = del_strain.as_chunks::<STRESS_STRAIN>();
-//     //let (history_, history_rest) = history.as_chunks_mut::<HISTORY>();
-//     let mut tangent_ = {
-//         match tangent {
-//             Some(t) => {
-//                 let (tangent_, tangent_rest_1) = t.as_chunks_mut::<STRESS_STRAIN>();
-//                 let (tangent_, tangent_rest_2) = tangent_.as_chunks_mut::<STRESS_STRAIN>();
-//                 Some(tangent_)
-//             }
-//             None => None,
-//         }
-//     };
-
-//     // extract history into an array of slices
-
-//     let mut history_: [&mut [f64];N_HISTORY];
-//     for (i,(name, dim)) in MODEL::HISTORY_MAP.iter().enumerate() {
-//         //let (start, len) = get_history_index::<STRESS_STRAIN, TANGENT, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS, MODEL>(name);
-//         history_[i] = *history.get(name).expect("History variable not found in model");
-//     }
-
-//     let stress_len = stress_.len();
-//     let del_strain_len = del_strain_.len();
-//     let history_len = history_.len();
-//     let tangent_len = tangent_.as_ref().map_or(0, |t| t.len());
-
-//     assert!(
-//         stress_len == del_strain_len
-//             && stress_len == history_len
-//             && (stress_len == tangent_len || tangent_.is_none()),
-//         "Stress, strain, history, and tangent lengths do not match: \
-//         stress_len: {}, del_strain_len: {}, history_len: {}, tangent_len: {}",
-//         stress_len,
-//         del_strain_len,
-//         history_len,
-//         tangent_len
-//     );
-//     assert!(
-//         stress_rest.is_empty()
-//             && del_strain_rest.is_empty()
-//             && history_rest.is_empty()
-//             && tangent_.as_ref().map_or(true, |t| t.is_empty()),
-//         "Input slices are not of the correct length: \
-//         stress_rest: {:?}, del_strain_rest: {:?}, history_rest: {:?}",
-//         stress_rest,
-//         del_strain_rest,
-//         history_rest
-//     );
-
-//     for i in 0..stress_len {
-//         let mut stress_chunk = stress_[i];
-//         let del_strain_chunk = del_strain_[i];
-//         let mut history_chunk = history_[i];
-//         let tangent_chunk: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]> =
-//             tangent_.as_mut().map(|t| &mut t[i]);
-//         MODEL::evaluate(
-//             time,
-//             del_time,
-//             &del_strain_chunk,
-//             &mut stress_chunk,
-//             tangent_chunk,
-//             &mut history_chunk,
-//             &parameters,
-//         );
-//     }
-// }

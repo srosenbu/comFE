@@ -5,11 +5,18 @@ edition = "2024"
 
 [dependencies]
 nalgebra = "0.32.0"
-phf = {version="0.10", features = ["macros"]}
+#phf = {version="0.10", features = ["macros"]}
 konst = "*"
-serde = { version = "1.0", features = ["derive"] }
-crabtime= "*"
+#serde = { version = "1.0", features = ["derive"] }
+#crabtime= "*"
+
+# Optional dependencies
+pyo3 = { version = "*", optional = false }
+numpy = { version = "*", optional = false }
 
 [lib]
 name = "comfe"
 crate-type = ["cdylib", "rlib"]
+
+#[features]
+#python-bindings = ["pyo3", "numpy"]
