@@ -21,6 +21,7 @@ create_history_parameter_struct!(
 );
 #[derive(Default, Clone, Copy)]
 pub struct DruckerPragerClassic3D{
+    parameters: DruckerPragerClassicParameters,
     elastic_tangent: SMatrix<f64, 6, 6>,
     elastic_tangent_inv: SMatrix<f64, 6, 6>,
     f: f64,
@@ -43,6 +44,7 @@ impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
         let elastic_tangent_inv = elastic_tangent.try_inverse().expect("D must be invertible");
         
         DruckerPragerClassic3D{
+            parameters: *parameters,
             elastic_tangent,
             elastic_tangent_inv,
             ..Default::default()
@@ -51,12 +53,41 @@ impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
 
     fn set_model_state(
         &mut self,
-        _sigma_0: &SVector<f64, 6>,
-        _sigma_1: &SVector<f64, 6>,
-        _del_eps: &SVector<f64, 6>,
+        sigma_0: &SVector<f64, 6>,
+        sigma_1: &SVector<f64, 6>,
+        del_eps: &SVector<f64, 6>,
         _kappa: &SVector<f64, 1>,
     ) {
+        const PROJECTION_DEV: SMatrix<f64, 6, 6> = const{projection_dev::<6>()};
+        const SYM_ID_OUTER_SYM_ID: SMatrix<f64, 6, 6> = const{sym_id_outer_sym_id::<6>()};
+        const SYM_ID : SVector<f64, 6> = const{sym_id::<6>()};
         // Implementation of setting model state
+        let (i_1, s) = sigma_1.trace_dev();
+        let j_2 = 0.5*s.norm_squared();
+        self.f = j_2.sqrt() + self.parameters.b * i_1 - self.parameters.a;
+        let df_di_1 = self.parameters.b;
+        let df_dj_2 = 0.5 / j_2.sqrt();
+        let _df_di_1i_1 = 0.0;
+        let df_dj_2j_2 = -0.25 / (j_2 * j_2.sqrt());
+        
+        self.df_dsigma = df_di_1 * SYM_ID + df_dj_2 * s;
+        self.g = self.df_dsigma.clone();
+        self.dg_dsigma = s * df_dj_2j_2 * s.transpose() + df_dj_2 * PROJECTION_DEV;
+        
+        self.del_plastic_strain = self.elastic_tangent_inv * (sigma_1-sigma_0);
+        let pl_norm = self.del_plastic_strain.norm();
+        self.k = SMatrix::from_element(f64::sqrt(2. / 3.) * pl_norm);
+        self.dk_dsigma = {
+            if pl_norm == 0.0 {
+                SMatrix::zeros()
+            } else {
+                (- f64::sqrt(2. / 3.) * self.elastic_tangent_inv * self.del_plastic_strain / pl_norm).transpose()
+            }
+        };
+        
+        
+        
+        
     }
 
     fn f(&self) -> f64 {
