@@ -5,10 +5,8 @@ edition = "2024"
 
 [dependencies]
 nalgebra = "0.32.0"
-#phf = {version="0.10", features = ["macros"]}
 konst = "*"
-#serde = { version = "1.0", features = ["derive"] }
-#crabtime= "*"
+
 
 # Optional dependencies
 pyo3 = { version = "*", optional = false }
