@@ -25,6 +25,11 @@ create_history_parameter_struct!(
 /// - $J_2$ is the second invariant of the deviatoric stress tensor
 /// - $I_1$ is the first invariant of the stress tensor
 /// - $a$ and $b$ are material parameters.
+///
+/// This struct does not implement the stress return algorithm but implements
+/// the required functions like the yield function, flow rule, etc.
+/// via the [`Plasticity`] trait. It is to be used within the [`IsotropicPlasticityModel3D`] 
+/// in order to solve the plasticity problem. 
 /// 
 /// # Parameters
 /// - `mu`: Shear modulus
