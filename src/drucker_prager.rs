@@ -169,7 +169,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             if pl_norm == 0.0 {
                 SVector::<f64, 6>::zeros()
             } else {
-                f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
+            - f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
             }
         };
         self.state.dk_dkappa = 0.0;
@@ -312,7 +312,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager23D {
             if pl_norm == 0.0 {
                 SVector::<f64, 6>::zeros()
             } else {
-                f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
+                - f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
             }
         };
         self.state.dk_dkappa = 0.0;
@@ -453,7 +453,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPragerClassic3D {
             if pl_norm == 0.0 {
                 SVector::<f64, 6>::zeros()
             } else {
-                f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
+                -f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
             }
         };
         self.state.dk_dkappa = 0.0;

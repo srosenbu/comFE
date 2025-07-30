@@ -555,7 +555,7 @@ if __name__ == "__main__":
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
-        "radial_factor": [0.999, ""],
+        "radial_factor": [0.0, ""],
     }
 
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager, 0.1)
