@@ -61,6 +61,11 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
         let y_0 = mises_parameters.y_0;
         let h = mises_parameters.h;
 
+        const SYM_ID: SMatrix<f64, 6, 1> = const { sym_id::<6>() };
+        const SYM_ID_OUTER_SYM_ID: SMatrix<f64, 6, 6> =
+            const { sym_id_outer_sym_id::<6>() };
+        const PROJECTION_DEV: SMatrix<f64, 6, 6> = const { projection_dev::<6>() };
+
         // Unpack history
         let history_ = Self::History::from_array_mut(history);
         let alpha = history_.alpha;
@@ -80,9 +85,9 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
         //the .max(0.0) contains the check if the stress is already above the yield surface
         if s_tr_eq < sigma_y {
             // Elastic step
-            stress_vec.copy_from(&(p_1 * SYM_ID_6 + s_tr));
+            stress_vec.copy_from(&(p_1 * SYM_ID + s_tr));
             if let Some(tangent) = tangent {
-                *tangent = (kappa * SYM_ID_6_OUTER_SYM_ID_6 + 2. * mu * PROJECTION_DEV_6)
+                *tangent = (kappa * SYM_ID_OUTER_SYM_ID + 2. * mu * PROJECTION_DEV)
                     .data
                     .0;
             }
@@ -98,12 +103,12 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
             history_.plastic_strain += del_gamma * n;
             history_.alpha += del_alpha;
 
-            stress_vec.copy_from(&(p_1 * SYM_ID_6 + theta * s_tr));
+            stress_vec.copy_from(&(p_1 * SYM_ID + theta * s_tr));
 
             if let Some(tangent) = tangent {
                 let theta_bar = 1.0 / (1.0 + (h / (3.0 * mu))) - (1.0 - theta);
-                let tangent_new = kappa * SYM_ID_6_OUTER_SYM_ID_6
-                    + 2.0 * mu * theta * PROJECTION_DEV_6
+                let tangent_new = kappa * SYM_ID_OUTER_SYM_ID
+                    + 2.0 * mu * theta * PROJECTION_DEV
                     + 2.0 * mu * theta_bar * n * n.transpose();
                 // Copy the tangent matrix to the output
                 *tangent = tangent_new.data.0;

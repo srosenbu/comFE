@@ -86,23 +86,3 @@ pub const fn projection_dev<const N: usize>() -> SMatrix<f64, N, N> {
     let sym_id_outer_sym_id_scaled = const_scalar_mult(sym_id_outer_sym_id::<N>(), -1.0 / 3.0);
     const_add_matrices(sym_id_outer_sym_id_scaled, id::<N>())
 }
-
-pub const SYM_ID_6: SVector<f64, 6> = sym_id::<6>();
-pub const SYM_ID_4: SVector<f64, 4> = sym_id::<4>();
-pub const SYM_ID_3: SVector<f64, 3> = sym_id::<3>();
-pub const SYM_ID_1: SVector<f64, 1> = sym_id::<1>();
-
-pub const SYM_ID_6_OUTER_SYM_ID_6: SMatrix<f64, 6, 6> = sym_id_outer_sym_id::<6>();
-pub const SYM_ID_4_OUTER_SYM_ID_4: SMatrix<f64, 4, 4> = sym_id_outer_sym_id::<4>();
-pub const SYM_ID_3_OUTER_SYM_ID_3: SMatrix<f64, 3, 3> = sym_id_outer_sym_id::<3>();
-pub const SYM_ID_1_OUTER_SYM_ID_1: SMatrix<f64, 1, 1> = sym_id_outer_sym_id::<1>();
-
-pub const ID_6: SMatrix<f64, 6, 6> = id::<6>();
-pub const ID_4: SMatrix<f64, 4, 4> = id::<4>();
-pub const ID_3: SMatrix<f64, 3, 3> = id::<3>();
-pub const ID_1: SMatrix<f64, 1, 1> = id::<1>();
-
-pub const PROJECTION_DEV_6: SMatrix<f64, 6, 6> = projection_dev::<6>();
-pub const PROJECTION_DEV_4: SMatrix<f64, 4, 4> = projection_dev::<4>();
-pub const PROJECTION_DEV_3: SMatrix<f64, 3, 3> = projection_dev::<3>();
-pub const PROJECTION_DEV_1: SMatrix<f64, 1, 1> = projection_dev::<1>();

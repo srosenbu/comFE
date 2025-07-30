@@ -9,6 +9,33 @@ use konst::{const_eq, eq_str};
 use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut, Scalar};
 //use phf::{Map, OrderedMap};
 //use serde::Serialize;
+// trait StrictOption<T: Sized> {
+//     fn is_some(&self) -> bool;
+//     fn is_none(&self) -> bool;
+//     fn unwrap(&self) -> &T;}
+
+// trait StrictSome<T: Sized>: StrictOption<T> {
+//     fn is_some(&self) -> bool {
+//         true
+//     }
+//     fn is_none(&self) -> bool {
+//         false
+//     }
+//     fn unwrap(&self) -> &T{
+//         self
+//     }
+// }
+// trait StrictNone<T>: StrictOption<T> {
+//     fn is_some(&self) -> bool {
+//         false
+//     }
+//     fn is_none(&self) -> bool {
+//         true
+//     }
+//     fn unwrap(&self) -> T {
+//         panic!("Called unwrap on a None value")
+//     }
+// }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -172,8 +199,7 @@ pub trait ConstitutiveModel<
     const HISTORY: usize,
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
->
-where
+> where
     Self: Sized,
 {
     type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
@@ -226,7 +252,7 @@ pub trait ConstitutiveModelFunction<
     type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim> + Copy;
     type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim> + Copy;
 
-    fn evaluate<const TANGENT: bool>(
+    fn evaluate_with(
         time: f64,
         del_time: f64,
         strain: SVector<f64, STRESS_STRAIN>,
@@ -363,10 +389,11 @@ pub fn evaluate_model<
     history: &mut [f64],
     parameters: &[f64],
 ) {
-    let parameters: [f64; PARAMETERS] = parameters
-        .try_into()
-        .expect(&format!("Length of parameters slice does not match the expected length. Expected: {}, got: {}.",
-            PARAMETERS, parameters.len()));
+    let parameters: [f64; PARAMETERS] = parameters.try_into().expect(&format!(
+        "Length of parameters slice does not match the expected length. Expected: {}, got: {}.",
+        PARAMETERS,
+        parameters.len()
+    ));
 
     let (stress_, stress_rest) = stress.as_chunks_mut::<STRESS_STRAIN>();
     let (strain_, strain_rest) = strain.as_chunks::<STRESS_STRAIN>();

@@ -6,7 +6,7 @@ use crate::{
     interfaces::{ArrayEquivalent, ConstitutiveModelFn, StaticMap},
     q_dim_data_type,
 };
-use nalgebra::{SMatrix, SMatrixView, SVector, SVectorView};
+use nalgebra::{SMatrix, SVector,};
 pub trait Plasticity<
     const STRESS_STRAIN: usize,
     const N_PARAMETERS: usize,
@@ -44,7 +44,7 @@ pub trait IsotropicPlasticity<
 >: Plasticity<STRESS_STRAIN, N_PARAMETERS, PARAMETERS, 1>
 {
 }
-struct IsotropicPlasticityModel3D<
+pub struct IsotropicPlasticityModel3D<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
     MODEL: Plasticity<6, N_PARAMETERS, PARAMETERS, 1>,
@@ -73,8 +73,8 @@ impl<
     type Parameters = MODEL::Parameters;
     #[inline]
     fn evaluate(
-        time: f64,
-        del_time: f64,
+        _time: f64,
+        _del_time: f64,
         _strain: &[f64; 6],
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
@@ -163,7 +163,7 @@ impl<
 
                 //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
                 dres.fixed_view_mut::<1, 6>(6, 0)
-                    .copy_from_slice((-model.dk_dsigma()).as_slice());
+                    .copy_from(&(-model.dk_dsigma()));
                 //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
                 dres.fixed_view_mut::<1, 1>(6, 6)
                     .copy_from(&(SVector::<f64, 1>::from_element(1.0) - model.dk_dkappa()));
@@ -229,7 +229,11 @@ impl<
             history_.alpha = alpha_1[0];
             history_.plastic_strain += model.del_plastic_strain();
             if let Some(tangent) = tangent {
-                *tangent = model.elastic_tangent().data.0;
+                let inverse = dres
+                    .try_inverse()
+                    .expect("Plasticity3D: Failed to calculate tangent");
+                let plastic_tangent: SMatrix<f64, 6, 6> = inverse.fixed_view::<6, 6>(0, 0).into();
+                *tangent = plastic_tangent.data.0;
             }
         }
     }

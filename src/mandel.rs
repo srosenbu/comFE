@@ -1,5 +1,4 @@
 use nalgebra::{coordinates::XYZWAB, Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector};
-use crate::consts::{ID_6, SYM_ID_6, SYM_ID_6_OUTER_SYM_ID_6};
 
 
 pub trait Mandel<const DIM: usize> {
