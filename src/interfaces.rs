@@ -149,7 +149,7 @@ macro_rules! create_history_parameter_struct {
         #[derive(Copy, Clone, Debug, Default)]
         pub struct $struct_name {
             $(
-                $field_name: q_dim_data_type!($qdim),
+                pub $field_name: q_dim_data_type!($qdim),
             )*
         }
 

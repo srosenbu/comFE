@@ -19,6 +19,12 @@ pub trait Mandel<const DIM: usize> {
         0.5 * dev.norm_squared()
     }
     
+    fn i1_j2_dev(&self) -> (f64, f64, SVector<f64,DIM>) {
+        let (i_1, dev) = self.trace_dev();
+        let j_2 = 0.5 * dev.norm_squared();
+        (i_1, j_2, dev)
+    }
+    
     fn mises_norm(&self) -> f64 {
         let j_2 = self.j_2();
         (3.0 * j_2).sqrt()

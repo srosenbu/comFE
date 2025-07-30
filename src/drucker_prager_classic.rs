@@ -1,12 +1,11 @@
-use crate::general_plasticity::*;
 use crate::consts::*;
+use crate::general_plasticity::*;
 use crate::impl_array_equivalent;
 use crate::interfaces::*;
 use crate::mandel::*;
 use crate::{create_history_parameter_struct, q_dim_data_type};
 //use crate::impl_from_array;
 use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut};
-
 
 create_history_parameter_struct!(
     DruckerPragerClassicParameters,
@@ -19,8 +18,21 @@ create_history_parameter_struct!(
         (b, (QDim::Scalar))
     ]
 );
+/// A classic Drucker-Prager plasticity model for 3D stress states.
+/// 
+/// This struct represents the Drucker-Prager yield criterion with associated flow rule.
+/// The yield function is defined as: $f = \sqrt{J_2} + b\cdot I_1 - a$, where:
+/// - $J_2$ is the second invariant of the deviatoric stress tensor
+/// - $I_1$ is the first invariant of the stress tensor
+/// - $a$ and $b$ are material parameters.
+/// 
+/// # Parameters
+/// - `mu`: Shear modulus
+/// - `kappa`: Bulk modulus  
+/// - `a`: Cohesion parameter
+/// - `b`: Friction parameter
 #[derive(Default, Clone, Copy)]
-pub struct DruckerPragerClassic3D{
+pub struct DruckerPragerClassic3D {
     parameters: DruckerPragerClassicParameters,
     elastic_tangent: SMatrix<f64, 6, 6>,
     elastic_tangent_inv: SMatrix<f64, 6, 6>,
@@ -36,15 +48,16 @@ pub struct DruckerPragerClassic3D{
     del_plastic_strain: SVector<f64, 6>,
 }
 
-impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
+impl Plasticity<6, 4, 4, 1> for DruckerPragerClassic3D {
     type Parameters = DruckerPragerClassicParameters;
 
     fn new(parameters: &Self::Parameters) -> Self {
-        let elastic_tangent = (2.0*parameters.mu) * const { projection_dev::<6>() } + parameters.kappa * const { sym_id_outer_sym_id::<6>() };
+        let elastic_tangent = (2.0 * parameters.mu) * const { projection_dev::<6>() }
+            + parameters.kappa * const { sym_id_outer_sym_id::<6>() };
         let elastic_tangent_inv = elastic_tangent.try_inverse().expect("D must be invertible");
-        
-        DruckerPragerClassic3D{
-            parameters: *parameters,
+
+        DruckerPragerClassic3D {
+            parameters: parameters.clone(),
             elastic_tangent,
             elastic_tangent_inv,
             ..Default::default()
@@ -58,36 +71,32 @@ impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
         del_eps: &SVector<f64, 6>,
         _kappa: &SVector<f64, 1>,
     ) {
-        const PROJECTION_DEV: SMatrix<f64, 6, 6> = const{projection_dev::<6>()};
-        const SYM_ID_OUTER_SYM_ID: SMatrix<f64, 6, 6> = const{sym_id_outer_sym_id::<6>()};
-        const SYM_ID : SVector<f64, 6> = const{sym_id::<6>()};
+        const PROJECTION_DEV: SMatrix<f64, 6, 6> = const { projection_dev::<6>() };
+        const SYM_ID: SVector<f64, 6> = const { sym_id::<6>() };
         // Implementation of setting model state
         let (i_1, s) = sigma_1.trace_dev();
-        let j_2 = 0.5*s.norm_squared();
+        let j_2 = 0.5 * s.norm_squared();
         self.f = j_2.sqrt() + self.parameters.b * i_1 - self.parameters.a;
         let df_di_1 = self.parameters.b;
         let df_dj_2 = 0.5 / j_2.sqrt();
         let _df_di_1i_1 = 0.0;
         let df_dj_2j_2 = -0.25 / (j_2 * j_2.sqrt());
-        
+
         self.df_dsigma = df_di_1 * SYM_ID + df_dj_2 * s;
         self.g = self.df_dsigma.clone();
         self.dg_dsigma = s * df_dj_2j_2 * s.transpose() + df_dj_2 * PROJECTION_DEV;
-        
-        self.del_plastic_strain = del_eps - self.elastic_tangent_inv * (sigma_1-sigma_0);
+
+        self.del_plastic_strain = del_eps - self.elastic_tangent_inv * (sigma_1 - sigma_0);
         let pl_norm = self.del_plastic_strain.norm();
         self.k = SMatrix::from_element(f64::sqrt(2. / 3.) * pl_norm);
         self.dk_dsigma = {
             if pl_norm == 0.0 {
                 SMatrix::zeros()
             } else {
-                (- f64::sqrt(2. / 3.) * self.elastic_tangent_inv * self.del_plastic_strain / pl_norm).transpose()
+                (-f64::sqrt(2. / 3.) * self.elastic_tangent_inv * self.del_plastic_strain / pl_norm)
+                    .transpose()
             }
         };
-        
-        
-        
-        
     }
 
     fn f(&self) -> f64 {
@@ -138,5 +147,4 @@ impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
         // Implementation of del_plastic_strain
         &self.del_plastic_strain
     }
-
 }
