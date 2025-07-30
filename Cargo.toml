@@ -9,12 +9,12 @@ konst = "*"
 
 
 # Optional dependencies
-pyo3 = { version = "*", optional = false }
-numpy = { version = "*", optional = false }
+pyo3 = { version = "*", optional = true }
+numpy = { version = "*", optional = true }
 
 [lib]
 name = "comfe"
 crate-type = ["cdylib", "rlib"]
 
-#[features]
-#python-bindings = ["pyo3", "numpy"]
+[features]
+python-bindings = ["pyo3", "numpy"]

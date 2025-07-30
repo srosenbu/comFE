@@ -74,7 +74,7 @@ impl Plasticity<6, 4,4, 1> for DruckerPragerClassic3D {
         self.g = self.df_dsigma.clone();
         self.dg_dsigma = s * df_dj_2j_2 * s.transpose() + df_dj_2 * PROJECTION_DEV;
         
-        self.del_plastic_strain = self.elastic_tangent_inv * (sigma_1-sigma_0);
+        self.del_plastic_strain = del_eps - self.elastic_tangent_inv * (sigma_1-sigma_0);
         let pl_norm = self.del_plastic_strain.norm();
         self.k = SMatrix::from_element(f64::sqrt(2. / 3.) * pl_norm);
         self.dk_dsigma = {
