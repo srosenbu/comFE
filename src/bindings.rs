@@ -4,7 +4,7 @@ use crate::interfaces::{ConstitutiveModelFn, evaluate_model};
 use crate::mises_plasticity::MisesPlasticity3D;
 use crate::linear_elasticity::LinearElasticity3D;
 use crate::drucker_prager_classic::DruckerPragerClassic3D;
-
+use std::collections::HashMap;
 #[cfg(feature = "python-bindings")]
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 #[cfg(feature = "python-bindings")]
@@ -12,7 +12,7 @@ use pyo3::{pyclass, pymethods};
 
 #[cfg(feature = "python-bindings")]
 macro_rules! implement_python_model {
-    ($name:ident, $model:ty, <$stress_strain:literal, $n_history:literal, $history:literal,$n_parameters:literal,$parameters:literal>) => {
+    ($name:ident, $model:ty) => {
         #[pyclass]
         pub struct $name(); 
         //{
@@ -41,15 +41,7 @@ macro_rules! implement_python_model {
                     Some(tangent) => Some(tangent.as_slice_mut().unwrap()),
                     None => None,
                 };
-
-                evaluate_model::<
-                    $stress_strain,
-                    $n_history,
-                    $history,
-                    $n_parameters,
-                    $parameters,
-                    $model,
-                >(
+                <$model>::evaluate_all(
                     time,
                     del_time,
                     strain,
@@ -65,8 +57,8 @@ macro_rules! implement_python_model {
 }
 
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D, <6, 2, 7, 4, 4>);
+implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D);
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyLinearElasticity3D, LinearElasticity3D, <6, 0, 0, 2, 2>);
+implement_python_model!(PyLinearElasticity3D, LinearElasticity3D);
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyDruckerPragerClassic3D, IsotropicPlasticityModel3D<4,4,DruckerPragerClassic3D>, <6, 2, 7, 4, 4>);
+implement_python_model!(PyDruckerPragerClassic3D, IsotropicPlasticityModel3D<4,4,DruckerPragerClassic3D>);

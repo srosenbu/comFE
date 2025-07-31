@@ -7,35 +7,6 @@ use crate::{
 };
 use konst::{const_eq, eq_str};
 use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut, Scalar};
-//use phf::{Map, OrderedMap};
-//use serde::Serialize;
-// trait StrictOption<T: Sized> {
-//     fn is_some(&self) -> bool;
-//     fn is_none(&self) -> bool;
-//     fn unwrap(&self) -> &T;}
-
-// trait StrictSome<T: Sized>: StrictOption<T> {
-//     fn is_some(&self) -> bool {
-//         true
-//     }
-//     fn is_none(&self) -> bool {
-//         false
-//     }
-//     fn unwrap(&self) -> &T{
-//         self
-//     }
-// }
-// trait StrictNone<T>: StrictOption<T> {
-//     fn is_some(&self) -> bool {
-//         false
-//     }
-//     fn is_none(&self) -> bool {
-//         true
-//     }
-//     fn unwrap(&self) -> T {
-//         panic!("Called unwrap on a None value")
-//     }
-// }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -144,7 +115,8 @@ impl<const N: usize> StaticMap<1, QDim> for [f64; N] {
 
 #[macro_export]
 macro_rules! create_history_parameter_struct {
-    ($struct_name:ident, $n:expr, $size:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
+    ($(#[$doc:meta])* $struct_name:ident, $n:expr, $size:expr, [$(($field_name:ident, $qdim:tt)),*]) => {
+        $(#[$doc])*
         #[repr(C)]
         #[derive(Copy, Clone, Debug, Default)]
         pub struct $struct_name {
@@ -193,32 +165,6 @@ macro_rules! impl_array_equivalent {
         }
     };
 }
-pub trait ConstitutiveModel<
-    const STRESS_STRAIN: usize,
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
-> where
-    Self: Sized,
-{
-    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
-    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
-
-    fn new(parameters: &Self::Parameters) -> Self;
-
-    fn evaluate(
-        &self,
-        time: f64,
-        del_time: f64,
-        strain: &[f64; STRESS_STRAIN],
-        del_strain: &[f64; STRESS_STRAIN],
-        stress: &mut [f64; STRESS_STRAIN],
-        tangent: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
-        history: &mut [f64; HISTORY],
-        parameters: &[f64; PARAMETERS],
-    );
-}
 pub trait ConstitutiveModelFn<
     const STRESS_STRAIN: usize,
     const N_HISTORY: usize,
@@ -226,6 +172,8 @@ pub trait ConstitutiveModelFn<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
 >
+where 
+    Self: Sized,
 {
     type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
     type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
@@ -240,31 +188,21 @@ pub trait ConstitutiveModelFn<
         history: &mut [f64; HISTORY],
         parameters: &[f64; PARAMETERS],
     );
-}
-pub trait ConstitutiveModelFunction<
-    const STRESS_STRAIN: usize,
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
->
-{
-    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim> + Copy;
-    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim> + Copy;
 
-    fn evaluate_with(
+    fn evaluate_all(
         time: f64,
         del_time: f64,
-        strain: SVector<f64, STRESS_STRAIN>,
-        del_strain: SVector<f64, STRESS_STRAIN>,
-        stress: SVector<f64, STRESS_STRAIN>,
-        history: Self::History,
-        parameters: Self::Parameters,
-    ) -> (
-        SVector<f64, STRESS_STRAIN>,
-        Option<SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>>,
-        Self::History,
-    );
+        strain: &[f64],
+        del_strain: &[f64],
+        stress: &mut [f64],
+        tangent: Option<&mut [f64]>,
+        history: &mut [f64],
+        parameters: &[f64],
+    ) {
+        evaluate_model::<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS, Self>(
+            time, del_time, strain, del_strain, stress, tangent, history, parameters
+        );
+    }
 }
 
 pub fn input_as_nalgebra<
@@ -301,49 +239,6 @@ where
         stress_view_mut,
         tangent_view_mut,
     )
-}
-
-pub trait ConstitutiveModelFn3D<
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
->
-{
-    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
-    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
-
-    fn evaluate(
-        time: f64,
-        del_time: f64,
-        strain: &[f64; 6],
-        del_strain: &[f64; 6],
-        stress: &mut [f64; 6],
-        tangent: Option<&mut [[f64; 6]; 6]>,
-        history: &mut [f64; HISTORY],
-        parameters: &[f64; PARAMETERS],
-    );
-}
-pub trait ConstitutiveModelFnPlaneStrain<
-    const N_HISTORY: usize,
-    const HISTORY: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
->
-{
-    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
-    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
-
-    fn evaluate(
-        time: f64,
-        del_time: f64,
-        strain: &[f64; 4],
-        del_strain: &[f64; 4],
-        stress: &mut [f64; 4],
-        tangent: Option<&mut [[f64; 4]; 4]>,
-        history: &mut [f64; HISTORY],
-        parameters: &[f64; PARAMETERS],
-    );
 }
 
 pub const fn check_constitutive_model_maps<
