@@ -52,6 +52,20 @@ macro_rules! implement_python_model {
                     parameters,
                 );
             }
+            fn history_dim(&self) -> HashMap<&str, usize> {
+                HashMap::from([("history",<$model>::HISTORY)])
+            }
+            fn stress_strain_dim(&self) -> usize {
+                <$model>::STRESS_STRAIN
+            }
+            fn geometry_dim(&self) -> usize {
+                match <$model>::STRESS_STRAIN {
+                    6 => 3,
+                    4 => 2,
+                    1 => 1,
+                    _ => panic!("Unsupported stress-strain dimension"),
+                }
+            }
         }
     };
 }

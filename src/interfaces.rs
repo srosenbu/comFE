@@ -177,6 +177,12 @@ where
 {
     type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
     type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+    
+    const STRESS_STRAIN: usize = STRESS_STRAIN;
+    const N_HISTORY: usize = N_HISTORY;
+    const HISTORY: usize = HISTORY;
+    const N_PARAMETERS: usize = N_PARAMETERS;
+    const PARAMETERS: usize = PARAMETERS;
 
     fn evaluate(
         time: f64,
