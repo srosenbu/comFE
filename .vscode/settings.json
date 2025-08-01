@@ -1,4 +1,5 @@
 {
     "rust-analyzer.inlayHints.typeHints.enable": true,
-    "rust-analyzer.inlayHints.parameterHints.enable": false
+    "rust-analyzer.inlayHints.parameterHints.enable": false,
+    "rust-analyzer.cargo.features": ["python-bindings"]
 }
