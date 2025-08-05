@@ -8,7 +8,6 @@ use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut};
 
 const _: () = assert!(check_constitutive_model_maps::<
     6,
-    36,
     2,
     7,
     4,
@@ -62,8 +61,7 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
         let h = mises_parameters.h;
 
         const SYM_ID: SMatrix<f64, 6, 1> = const { sym_id::<6>() };
-        const SYM_ID_OUTER_SYM_ID: SMatrix<f64, 6, 6> =
-            const { sym_id_outer_sym_id::<6>() };
+        const SYM_ID_OUTER_SYM_ID: SMatrix<f64, 6, 6> = const { sym_id_outer_sym_id::<6>() };
         const PROJECTION_DEV: SMatrix<f64, 6, 6> = const { projection_dev::<6>() };
 
         // Unpack history

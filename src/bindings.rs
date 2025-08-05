@@ -11,13 +11,20 @@ use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::{pyclass, pymethods};
 
 #[cfg(feature = "python-bindings")]
+#[pyclass]
+enum StressStrainConstraint {
+    UNIAXIAL_STRAIN = 1,
+    UNIAXIAL_STRESS = 2,
+    PLANE_STRAIN = 3,
+    PLANE_STRESS = 4,
+    FULL = 5,
+}
+#[cfg(feature = "python-bindings")]
 macro_rules! implement_python_model {
     ($name:ident, $model:ty) => {
         #[pyclass]
         pub struct $name(); 
-        //{
-        //    model: $model,
-        //}
+
         #[pymethods]
         impl $name {
             fn evaluate(

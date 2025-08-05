@@ -249,7 +249,6 @@ where
 
 pub const fn check_constitutive_model_maps<
     const STRESS_STRAIN: usize,
-    const TANGENT: usize,
     const N_HISTORY: usize,
     const HISTORY: usize,
     const N_PARAMETERS: usize,

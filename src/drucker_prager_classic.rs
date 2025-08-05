@@ -33,9 +33,9 @@ create_history_parameter_struct!(
 /// 
 /// # Parameters
 /// - `mu`: Shear modulus
-/// - `kappa`: Bulk modulus  
-/// - `a`: Cohesion parameter
-/// - `b`: Friction parameter
+/// - `kappa`: Bulk modulus
+/// - `a`: slope of the yield surface in $I_1,\sqrt{J_2}$ space
+/// - `b`: Yield strength at zero pressure
 #[derive(Default, Clone, Copy)]
 pub struct DruckerPragerClassic3D {
     parameters: DruckerPragerClassicParameters,
