@@ -536,11 +536,11 @@ if __name__ == "__main__":
     #     "h": [2000.0, "MPa"],
     # }
     # test_uniaxial_strain_3D(co.laws.PyUniaxialStressEngelen3D, parameters_engelen)
-    b_by_a_goal = (1 / 2.2) * (1 / 3) * math.sqrt(3 / 2) ** 3
+    b_by_a_goal = (1 / 3) * math.sqrt(3 / 2) ** 3 / 2.17
     a = 5111012.97882567  # Pa
-    # a = 1.0
+    a = 1.0
     b = 1277753.2447064174  # Pa
-    # b = b_by_a_goal
+    b = b_by_a_goal
     b_by_a = b / a
     parameters_drucker_prager = {
         "a_y": [a, "Pa"],
@@ -555,12 +555,12 @@ if __name__ == "__main__":
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
-        "radial_factor": [0.0, ""],
+        "radial_factor": [0.9999, ""],
     }
 
-    # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager, 0.1)
-    # test_uniaxial_strain_3D(co.laws.PyDruckerPragerClassic3D, parameters_drucker_prager)
-    test_uniaxial_strain_3D(co.laws.PyDruckerPrager23D, parameters_drucker_prager)
+    # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, 0.1)
+    test_uniaxial_strain_3D(co.laws.PyDruckerPragerClassic3D, parameters_drucker_prager)
+    # test_uniaxial_strain_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager)
     # parameters_linear_elasticity = {
     #     "density": [2.440e-6, "kg / mm**3"],
     #     "rho": [2.440e-6, "kg / mm**3"],

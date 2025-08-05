@@ -81,162 +81,14 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         let shear_modulus = *parameters.get("shear_modulus")?;
         let bulk_modulus = *parameters.get("bulk_modulus")?;
         let lambda = bulk_modulus - 2.0 * shear_modulus / 3.0;
-        let D = PROJECTION_DEV_6 * lambda + SMatrix::<f64, 6, 6>::identity() * 2. * lambda;
-        let D_inv = D.try_inverse()?;
-        Some(Self {
-            a_y: *parameters.get("a_y")?,
-            b_y: *parameters.get("b_y")?,
-            d_y: *parameters.get("d_y")?,
-            e_f: *parameters.get("e_f")?,
-            h: *parameters.get("h")?,
-            alpha_0: *parameters.get("alpha_0")?,
-            radial_factor: *parameters.get("radial_factor")?,
-            D: D,
-            D_inv: D_inv,
-            state: DruckerPragerState::default(),
-        })
-    }
-    fn set_model_state(
-        &mut self,
-        sigma_0: &SVector<f64, 6>,
-        sigma_1: &SVector<f64, 6>,
-        del_eps: &SVector<f64, 6>,
-        kappa: f64,
-        nonlocal_strain: f64,
-        damage_0: f64,
-    ) {
-        let (p, s) = mandel_decomposition(sigma_1);
-        let i_1 = -3.0 * p;
-        let j_2 = 0.5 * s.norm_squared();
-        self.state.i_1 = i_1;
-        self.state.j_2 = j_2;
-        self.state.stress_dev = s;
-        self.state.history = kappa;
-        self.state.nonlocal_strain = nonlocal_strain;
-        self.state.del_plastic_strain = del_eps - self.D_inv * (sigma_1 - sigma_0);
-        //println!("del_pl: {}", self.state.del_plastic_strain);
-        self.state.damage = {
-            let damage_1 = 1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f);
-            if damage_1 > damage_0 {
-                damage_1
-            } else {
-                damage_0
-            }
-        };
-        self.state.f = self.state.j_2
-            - (1. - self.state.damage)
-                * (1. + self.h * self.state.history)
-                * (self.b_y / self.a_y).powi(2)
-                * ((self.state.i_1 - self.d_y).powi(2) - self.a_y.powi(2));
-        assert!(!self.state.f.is_nan(), "f is NaN");
-        assert!(!self.state.f.is_infinite(), "f is infinite");
-        //println!("f: {}", self.state.f);
-        //println!("i_1: {}", self.state.i_1);
-        //println!("j_2: {}", self.state.j_2);
-        //println!("kappa: {}", kappa);
-        let df_di_1 = -2.0
-            * (1. - self.state.damage)
-            * (1. + self.h * self.state.history)
-            * (self.b_y / self.a_y).powi(2)
-            * (self.state.i_1 - self.d_y);
-
-        let df_dj_2 = 1.0;
-        self.state.df_dkappa = -(1. - self.state.damage)
-            * self.h
-            * (self.b_y / self.a_y).powi(2)
-            * ((self.state.i_1 - self.d_y).powi(2) - self.a_y.powi(2));
-
-        self.state.df_dsigma = df_di_1 * MANDEL_IDENTITY + s;
-        self.state.m = (1.0 - self.radial_factor) * df_di_1 * MANDEL_IDENTITY + s;
-
-        let dm_di_1 = -2.0
-            * (1. - self.radial_factor)
-            * (1. - self.state.damage)
-            * (1. + self.h * self.state.history)
-            * (self.b_y / self.a_y).powi(2);
-        self.state.dm_dsigma =
-            MANDEL_IDENTITY * dm_di_1 * MANDEL_IDENTITY.transpose() + PROJECTION_DEV_6;
-        self.state.dm_dkappa = -2.0
-            * (1. - self.radial_factor)
-            * (1. - self.state.damage)
-            * self.h
-            * (self.b_y / self.a_y).powi(2)
-            * (self.state.i_1 - self.d_y)
-            * MANDEL_IDENTITY;
-        let pl_norm = self.state.del_plastic_strain.norm();
-        self.state.k = f64::sqrt(2. / 3.) * pl_norm;
-        self.state.dk_dsigma = {
-            if pl_norm == 0.0 {
-                SVector::<f64, 6>::zeros()
-            } else {
-            - f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
-            }
-        };
-        self.state.dk_dkappa = 0.0;
-    }
-
-    fn damage(&self) -> f64 {
-        self.state.damage
-    }
-    fn f(&self) -> f64 {
-        self.state.f
-    }
-    fn df_dsigma(&self) -> SVector<f64, 6> {
-        self.state.df_dsigma
-    }
-    fn df_dkappa(&self) -> f64 {
-        self.state.df_dkappa
-    }
-    fn m(&self) -> SVector<f64, 6> {
-        self.state.m
-    }
-    fn dm_dsigma(&self) -> SMatrix<f64, 6, 6> {
-        self.state.dm_dsigma
-    }
-    fn dm_dkappa(&self) -> SVector<f64, 6> {
-        self.state.dm_dkappa
-    }
-    fn k(&self) -> f64 {
-        self.state.k
-    }
-    fn dk_dsigma(&self) -> SVector<f64, 6> {
-        self.state.dk_dsigma
-    }
-    fn dk_dkappa(&self) -> f64 {
-        self.state.dk_dkappa
-    }
-    fn elastic_tangent(&self) -> SMatrixView<f64, 6, 6> {
-        SMatrixView::from(&self.D)
-    }
-    fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6> {
-        SMatrixView::from(&self.D_inv)
-    }
-    fn del_plastic_strain(&self) -> SVector<f64, 6> {
-        self.state.del_plastic_strain
-    }
-}
-#[derive(Debug, Default)]
-pub struct DruckerPrager23D {
-    pub a_y: f64,
-    pub b_y: f64,
-    pub d_y: f64,
-    pub e_f: f64,
-    pub h: f64,
-    pub alpha_0: f64,
-    pub radial_factor: f64, //for one: pure radial return
-    D: SMatrix<f64, 6, 6>,
-    D_inv: SMatrix<f64, 6, 6>,
-    state: DruckerPragerState,
-}
-impl IsotropicHardeningPlasticity3D for DruckerPrager23D {
-    fn new(parameters: &HashMap<String, f64>) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        let shear_modulus = *parameters.get("shear_modulus")?;
-        let bulk_modulus = *parameters.get("bulk_modulus")?;
-        let lambda = bulk_modulus - 2.0 * shear_modulus / 3.0;
-        let D = PROJECTION_DEV_6 * lambda + SMatrix::<f64, 6, 6>::identity() * 2. * lambda;
+        let D = SMatrix::<f64, 6, 6>::new(
+            2. * shear_modulus + lambda, lambda, lambda, 0., 0., 0.,
+            lambda, 2. * shear_modulus + lambda, lambda, 0., 0., 0.,
+            lambda, lambda, 2. * shear_modulus + lambda, 0., 0., 0.,
+            0., 0., 0., 2.*shear_modulus, 0., 0.,
+            0., 0., 0., 0., 2.*shear_modulus, 0.,
+            0., 0., 0., 0., 0., 2.*shear_modulus,
+        );
         let D_inv = D.try_inverse()?;
         Some(Self {
             a_y: *parameters.get("a_y")?,
@@ -379,7 +231,14 @@ impl IsotropicHardeningPlasticity3D for DruckerPragerClassic3D {
         let shear_modulus = *parameters.get("shear_modulus")?;
         let bulk_modulus = *parameters.get("bulk_modulus")?;
         let lambda = bulk_modulus - 2.0 * shear_modulus / 3.0;
-        let D = PROJECTION_DEV_6 * lambda + SMatrix::<f64, 6, 6>::identity() * 2. * lambda;
+        let D = SMatrix::<f64, 6, 6>::new(
+            2. * shear_modulus + lambda, lambda, lambda, 0., 0., 0.,
+            lambda, 2. * shear_modulus + lambda, lambda, 0., 0., 0.,
+            lambda, lambda, 2. * shear_modulus + lambda, 0., 0., 0.,
+            0., 0., 0., 2.*shear_modulus, 0., 0.,
+            0., 0., 0., 0., 2.*shear_modulus, 0.,
+            0., 0., 0., 0., 0., 2.*shear_modulus,
+        );
         let D_inv = D.try_inverse()?;
         Some(Self {
             a_y: *parameters.get("a_y")?,
@@ -603,7 +462,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             while (res_sigma.norm() > 1e-6 * res_sigma_0_norm
                 || res_kappa.abs() > 1e-6 * res_kappa_0_norm
                 || res_f.abs() > 1e-6 * res_f_0_norm)
-                || ((sigma_1 - sigma_prev).norm() > 1e-6 * sigma_1.norm()
+                && ((sigma_1 - sigma_prev).norm() > 1e-6 * sigma_1.norm()
                     || (alpha_1 - alpha_prev).abs() > 1e-6 * alpha_1.abs()
                     || (del_lambda - del_lambda_prev).abs() > 1e-6 * del_lambda.abs())
             {

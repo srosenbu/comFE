@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from .comfe import (
     PyDruckerPrager3D,
-    PyDruckerPrager23D,
     PyDruckerPragerClassic3D,
     PyEngelen3D,
     PyGradientJH23D,
@@ -41,7 +40,6 @@ __all__ = [
     "PyRUB3D",
     "PyGradientRUB3D",
     "PyDruckerPrager3D",
-    "PyDruckerPrager23D",
     "PyDruckerPragerClassic3D",
 ]
 RustConstitutiveModel = (
@@ -58,7 +56,6 @@ RustConstitutiveModel = (
     | PyRUB3D
     | PyGradientRUB3D
     | PyDruckerPrager3D
-    | PyDruckerPrager23D
     | PyDruckerPragerClassic3D
 )
 
