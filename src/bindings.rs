@@ -3,7 +3,7 @@ use crate::general_plasticity::{IsotropicPlasticity, IsotropicPlasticityModel3D}
 use crate::interfaces::{ConstitutiveModelFn, evaluate_model};
 use crate::mises_plasticity::MisesPlasticity3D;
 use crate::linear_elasticity::LinearElasticity3D;
-use crate::drucker_prager_classic::DruckerPragerClassic3D;
+use crate::drucker_prager_classic::DruckerPrager3D;
 use std::collections::HashMap;
 #[cfg(feature = "python-bindings")]
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
@@ -20,14 +20,39 @@ enum StressStrainConstraint {
     FULL = 5,
 }
 #[cfg(feature = "python-bindings")]
+#[pymethods]
+impl StressStrainConstraint {
+    #[getter]
+    pub fn stress_strain_dim(&self) -> usize {
+        match self {
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 4,
+            StressStrainConstraint::PLANE_STRESS => 4,
+            StressStrainConstraint::FULL => 6,
+        }
+    }
+    #[getter]
+    pub fn geometric_dim(&self) -> usize {
+        match self {
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 2,
+            StressStrainConstraint::PLANE_STRESS => 2,
+            StressStrainConstraint::FULL => 3,
+        }
+
+    }
+}
+#[cfg(feature = "python-bindings")]
 macro_rules! implement_python_model {
     ($name:ident, $model:ty) => {
         #[pyclass]
-        pub struct $name(); 
+        struct $name();
 
         #[pymethods]
         impl $name {
-            fn evaluate(
+            pub fn evaluate(
                 &self,
                 time: f64,
                 del_time: f64,
@@ -59,13 +84,13 @@ macro_rules! implement_python_model {
                     parameters,
                 );
             }
-            fn history_dim(&self) -> HashMap<&str, usize> {
+            pub fn history_dim(&self) -> HashMap<&str, usize> {
                 HashMap::from([("history",<$model>::HISTORY)])
             }
-            fn stress_strain_dim(&self) -> usize {
+            pub fn stress_strain_dim(&self) -> usize {
                 <$model>::STRESS_STRAIN
             }
-            fn geometry_dim(&self) -> usize {
+            pub fn geometry_dim(&self) -> usize {
                 match <$model>::STRESS_STRAIN {
                     6 => 3,
                     4 => 2,
@@ -82,4 +107,4 @@ implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D);
 #[cfg(feature = "python-bindings")]
 implement_python_model!(PyLinearElasticity3D, LinearElasticity3D);
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyDruckerPragerClassic3D, IsotropicPlasticityModel3D<4,4,DruckerPragerClassic3D>);
+implement_python_model!(PyDruckerPrager3D, IsotropicPlasticityModel3D<4,4,DruckerPrager3D>);

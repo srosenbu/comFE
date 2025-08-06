@@ -211,42 +211,52 @@ where
     }
 }
 
-pub fn input_as_nalgebra<
-    'a,
+trait SmallStrainConstitutiveModel<
     const STRESS_STRAIN: usize,
     const N_HISTORY: usize,
     const HISTORY: usize,
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
->(
-    strain: &'a [f64; STRESS_STRAIN],
-    del_strain: &'a [f64; STRESS_STRAIN],
-    stress: &'a mut [f64; STRESS_STRAIN],
-    tangent: Option<&'a mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
-) -> (
-    SVectorView<'a, f64, STRESS_STRAIN>,
-    SVectorView<'a, f64, STRESS_STRAIN>,
-    SVectorViewMut<'a, f64, STRESS_STRAIN>,
-    Option<SMatrixViewMut<'a, f64, STRESS_STRAIN, STRESS_STRAIN>>,
-)
-where
-    SVectorView<'a, f64, STRESS_STRAIN>: MandelView<'a, STRESS_STRAIN>,
-    SVectorViewMut<'a, f64, STRESS_STRAIN>: MandelViewMut<'a, STRESS_STRAIN>,
+>
+where 
+    Self: Sized,
 {
-    let strain_view = SVectorView::from_array(strain);
-    let del_strain_view = SVectorView::from_array(del_strain);
-    let stress_view_mut = SVectorViewMut::from_array(stress);
+    type History: ArrayEquivalent<HISTORY> + StaticMap<N_HISTORY, QDim>;
+    type Parameters: ArrayEquivalent<PARAMETERS> + StaticMap<N_PARAMETERS, QDim>;
+    
+    const STRESS_STRAIN: usize = STRESS_STRAIN;
+    const N_HISTORY: usize = N_HISTORY;
+    const HISTORY: usize = HISTORY;
+    const N_PARAMETERS: usize = N_PARAMETERS;
+    const PARAMETERS: usize = PARAMETERS;
 
-    let tangent_view_mut = tangent.map(|t| SMatrixViewMut::from_slice(t.as_flattened_mut()));
+    fn evaluate(
+        time: f64,
+        del_time: f64,
+        strain: &SVector<f64, STRESS_STRAIN>,
+        del_strain: &SVector<f64, STRESS_STRAIN>,
+        stress: &mut SVector<f64,STRESS_STRAIN>,
+        tangent: Option<&mut SMatrix<f64,STRESS_STRAIN,STRESS_STRAIN>>,
+        history: &mut Self::History,
+        parameters: &Self::Parameters,
+    );
 
-    (
-        strain_view,
-        del_strain_view,
-        stress_view_mut,
-        tangent_view_mut,
-    )
+    fn evaluate_all(
+        time: f64,
+        del_time: f64,
+        strain: &[f64],
+        del_strain: &[f64],
+        stress: &mut [f64],
+        tangent: Option<&mut [f64]>,
+        history: &mut [f64],
+        parameters: &[f64],
+    );
 }
 
+
+/// A function that checks if the combined length of the history and the parameters is equal to `HISTORY` and `PARAMETERS`.
+/// This is needed because both the number of history values and parameters and the size of both (which are different if we have
+/// for example one vector-valued history variable) are defined seperately.
 pub const fn check_constitutive_model_maps<
     const STRESS_STRAIN: usize,
     const N_HISTORY: usize,
@@ -272,6 +282,8 @@ pub const fn check_constitutive_model_maps<
     const_eq!(size_parameters, PARAMETERS) && const_eq!(size_history, HISTORY)
 }
 
+/// Evaluates a constitutive model with input for more than one quadrature point.
+/// Panics if the sizes of the input are inconsistent.
 pub fn evaluate_model<
     const STRESS_STRAIN: usize,
     const N_HISTORY: usize,

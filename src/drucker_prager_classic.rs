@@ -8,7 +8,7 @@ use crate::{create_history_parameter_struct, q_dim_data_type};
 use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut};
 
 create_history_parameter_struct!(
-    DruckerPragerClassicParameters,
+    DruckerPragerParameters,
     4,
     4,
     [
@@ -29,7 +29,7 @@ create_history_parameter_struct!(
 /// This struct does not implement the stress return algorithm but implements
 /// the required functions like the yield function, flow rule, etc.
 /// via the [`Plasticity`] trait. It is to be used within the [`IsotropicPlasticityModel3D`] 
-/// in order to solve the plasticity problem. 
+/// in order to solve the plasticity problem.
 /// 
 /// # Parameters
 /// - `mu`: Shear modulus
@@ -37,8 +37,8 @@ create_history_parameter_struct!(
 /// - `a`: slope of the yield surface in $I_1,\sqrt{J_2}$ space
 /// - `b`: Yield strength at zero pressure
 #[derive(Default, Clone, Copy)]
-pub struct DruckerPragerClassic3D {
-    parameters: DruckerPragerClassicParameters,
+pub struct DruckerPrager3D {
+    parameters: DruckerPragerParameters,
     elastic_tangent: SMatrix<f64, 6, 6>,
     elastic_tangent_inv: SMatrix<f64, 6, 6>,
     f: f64,
@@ -53,15 +53,15 @@ pub struct DruckerPragerClassic3D {
     del_plastic_strain: SVector<f64, 6>,
 }
 
-impl Plasticity<6, 4, 4, 1> for DruckerPragerClassic3D {
-    type Parameters = DruckerPragerClassicParameters;
+impl Plasticity<6, 4, 4, 1> for DruckerPrager3D {
+    type Parameters = DruckerPragerParameters;
 
     fn new(parameters: &Self::Parameters) -> Self {
         let elastic_tangent = (2.0 * parameters.mu) * const { projection_dev::<6>() }
             + parameters.kappa * const { sym_id_outer_sym_id::<6>() };
         let elastic_tangent_inv = elastic_tangent.try_inverse().expect("D must be invertible");
 
-        DruckerPragerClassic3D {
+        DruckerPrager3D {
             parameters: parameters.clone(),
             elastic_tangent,
             elastic_tangent_inv,
