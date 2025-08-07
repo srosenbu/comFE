@@ -1,14 +1,14 @@
 use crate::general_plasticity::{IsotropicPlasticity, IsotropicPlasticityModel3D};
 //#[cfg(feature = "python-bindings")]
-use crate::interfaces::{ConstitutiveModelFn, evaluate_model};
-use crate::mises_plasticity::MisesPlasticity3D;
-use crate::linear_elasticity::LinearElasticity3D;
 use crate::drucker_prager_classic::DruckerPrager3D;
-use std::collections::HashMap;
+use crate::interfaces::{ConstitutiveModelFn, evaluate_model};
+use crate::linear_elasticity::LinearElasticity3D;
+use crate::mises_plasticity::MisesPlasticity3D;
 #[cfg(feature = "python-bindings")]
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 #[cfg(feature = "python-bindings")]
 use pyo3::{pyclass, pymethods};
+use std::collections::HashMap;
 
 #[cfg(feature = "python-bindings")]
 #[pyclass]
@@ -41,14 +41,25 @@ impl StressStrainConstraint {
             StressStrainConstraint::PLANE_STRESS => 2,
             StressStrainConstraint::FULL => 3,
         }
-
     }
 }
+
+/// A macro that generates Python bindings for a constitutive model that is somewhat compatible with
+/// the interface of (fenics-constitutive)[https://github.com/BAMresearch/fenics-constitutive/]
 #[cfg(feature = "python-bindings")]
+#[macro_export]
 macro_rules! implement_python_model {
     ($name:ident, $model:ty) => {
         #[pyclass]
-        struct $name();
+        struct $name {
+            parameters: <$model as ConstitutiveModelFn<
+                { <$model>::STRESS_STRAIN },
+                { <$model>::N_HISTORY },
+                { <$model>::HISTORY },
+                { <$model>::N_PARAMETERS },
+                { <$model>::PARAMETERS },
+            >>::Parameters,
+        }
 
         #[pymethods]
         impl $name {
@@ -84,13 +95,16 @@ macro_rules! implement_python_model {
                     parameters,
                 );
             }
+            #[getter]
             pub fn history_dim(&self) -> HashMap<&str, usize> {
-                HashMap::from([("history",<$model>::HISTORY)])
+                HashMap::from([("history", <$model>::HISTORY)])
             }
+            #[getter]
             pub fn stress_strain_dim(&self) -> usize {
                 <$model>::STRESS_STRAIN
             }
-            pub fn geometry_dim(&self) -> usize {
+            #[getter]
+            pub fn geometric_dim(&self) -> usize {
                 match <$model>::STRESS_STRAIN {
                     6 => 3,
                     4 => 2,
