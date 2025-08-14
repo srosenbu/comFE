@@ -545,20 +545,25 @@ if __name__ == "__main__":
     b = 1277753.2447064174  # Pa
     # b = b_by_a_goal
     b_by_a = b / a
+    #a_r: 5100000.0 b_r: 424932.58248730964 d_r: 5100000.0
+    #a_y: 5111012.97882567 b_y: 1277753.2447064174 d_y: 15311012.97882567
     parameters_drucker_prager = {
         "a_y": [a, "Pa"],
         "b_y": [b, "Pa"],
         "d_y": [15311012.97882567, "Pa"],
-        "e_f": [0.002, ""],
+        "a_r": [5100000.0, "Pa"],
+        "b_r": [424932.58248730964, "Pa"],
+        "d_r": [5100000.0, "Pa"],
+        "e_f": [0.0002, ""],
         "h": [00.0, ""],
-        "alpha_0": [1.0025, ""],
+        "alpha_0": [1.0002, ""],
         "density": [2.440e-6, "kg / mm**3"],
         "rho": [2.440e-6, "kg / mm**3"],
         "shear_modulus": [12000.0, "MPa"],
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
-        "radial_factor": [0.0, ""],
+        "radial_factor": [0.99, ""],
     }
 
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, 0.1)
