@@ -1,5 +1,5 @@
 use nalgebra::{coordinates::XYZWAB, Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector};
-
+use crate::consts::*;
 
 pub trait Mandel<const DIM: usize> {
     fn trace(&self) -> f64;
@@ -77,7 +77,7 @@ macro_rules! impl_mandel {
             }
             fn elasticity_inv(stress: Self, mu:f64, kappa:f64) -> SVector<f64,$dim> {
                 let (vol, dev) = stress.vol_dev();
-                let mut strain = (1.0/mu) * dev;
+                let mut strain = (1.0/(2.0*mu)) * dev;
                 strain.add_volumetric(vol*(1.0/kappa));
                 strain
             }
@@ -134,3 +134,35 @@ impl<'a> MandelViewMut<'a, 4> for SVectorViewMut<'a, f64, 4> {
         unsafe{SVectorViewMut::<'a, f64, 4>::from_slice_unchecked(slice,0)}
     }
 }
+
+pub fn elastic_tangent<const N:usize>(mu:f64, kappa:f64) -> SMatrix<f64, N,N> {
+    (2.0 * mu) * const { projection_dev::<N>() }
+            + kappa * const { sym_id_outer_sym_id::<N>() }
+}
+
+pub fn elastic_tangent_inv<const N:usize>(mu:f64, kappa:f64) -> SMatrix<f64, N,N> {
+  (1.0/(2.0*mu)) * const { projection_dev::<N>() }
+            + (1.0/kappa) * const { sym_id_outer_sym_id::<N>() }
+}
+
+#[cfg(test)]
+mod tests_mandel {
+    use super::*;
+
+    #[test]
+    fn test_elasticity_tangent() {
+        let mu = 1.2e+9;
+        let kappa = 1.6e+9;
+        let E = elastic_tangent::<6>(mu,kappa);
+        let E_inv = elastic_tangent_inv::<6>(mu, kappa);
+        let eye = SMatrix::<f64,6,6>::identity();
+        println!("{}", E);
+
+        println!("{}", E_inv);
+        println!("{}", E.try_inverse().unwrap());
+        println!("{}", E*E_inv);
+        assert!((E*E_inv-eye).norm() < 1e-12 + 1e-12*E.norm())
+    }
+
+}
+

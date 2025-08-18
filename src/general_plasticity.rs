@@ -134,20 +134,14 @@ impl<
                 res_f,
             ]);
             let mut i = 0;
-            let maxit = 100;
+            let maxit = 25;
+            let atol = 1e-8;
+            let rtol = 1e-8;
             //println!("residual: {}", res);
-            let res_sigma_0_norm = res_sigma.norm();
-            let res_kappa_0_norm = res_kappa.abs();
-            let res_f_0_norm = res_f.abs();
-            let mut sigma_prev = sigma_0;
-            let mut alpha_prev: SVector<f64, 1> = sol_0.fixed_view::<1, 1>(6, 0).into();
-            let mut del_lambda_prev = sol_0[7];
-            while (res_sigma.norm() > 1e-6 * res_sigma_0_norm
-                || res_kappa.abs() > 1e-6 * res_kappa_0_norm
-                || res_f.abs() > 1e-6 * res_f_0_norm)
-                || ((sigma_1 - sigma_prev).norm() > 1e-6 * sigma_1.norm()
-                    || (alpha_1 - alpha_prev).norm() > 1e-6 * alpha_1.norm()
-                    || (del_lambda - del_lambda_prev).abs() > 1e-6 * del_lambda.abs())
+            let mut sigma_prev: SVector<f64, 6>;
+            let mut alpha_prev: SVector<f64, 1>;
+            let mut del_lambda_prev:f64;
+            loop
             {
                 sol_0 = sol_1;
 
@@ -215,6 +209,17 @@ impl<
                     res_kappa[0],
                     res_f,
                 ]);
+                let converged_res: bool = res_sigma.norm() < atol && res_kappa[0].abs() < atol && res_f.abs() < atol;
+                let converged_incr: bool = (sigma_1 - sigma_prev).norm() < atol + rtol * sigma_1.norm()
+                    && (alpha_1 - alpha_prev)[0].abs() < atol + rtol * alpha_1[0].abs()
+                    && (del_lambda - del_lambda_prev).abs() < atol + rtol * del_lambda.abs();
+                if  converged_res {
+                   break;
+                }
+                if converged_incr
+                {
+                   break;
+                }
                 if i > maxit {
                     panic!(
                         "Plasticity3D: Newton-Raphson did not converge. residual: {}, solution change: {}",
