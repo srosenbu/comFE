@@ -680,20 +680,20 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + 1. / density_mid * (sigma_1.dot(&self.model.del_plastic_strain()));
+            let e_1 = e_0 + 1. / density_mid * (sigma_mid.dot(&self.model.del_plastic_strain()));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
-            let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
+            let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
             let del_elastic_strain = d_eps * del_t - self.model.del_plastic_strain();
-            let e_1 = e_0 + 1. / density_mid * (sigma_1.dot(&del_elastic_strain));
+            let e_1 = e_0 + 1. / density_mid * (sigma_mid.dot(&del_elastic_strain));
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
             let e_0 = input.get_scalar(Q::InternalEnergy, ip);
             let sigma_mid = 0.5 * (sigma_0 + sigma_1);
-            let e_1 = e_0 + del_t / density_mid * sigma_1.dot(&d_eps);
+            let e_1 = e_0 + del_t / density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
