@@ -60,8 +60,7 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
             + (2.0 * mu) * del_strain_vec;
 
         if let Some(tangent) = tangent {
-            let tangent_mat =
-                const { sym_id_outer_sym_id::<6>() } * lambda + (2.0 * mu) * const { id::<6>() };
+            let tangent_mat = isotropic_elastic_tangent(mu, kappa);
             *tangent = tangent_mat.data.0;
         }
     }

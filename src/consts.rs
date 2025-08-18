@@ -81,8 +81,9 @@ pub const fn const_scalar_mult<const N: usize, const M: usize>(
     let storage = ArrayStorage::<f64, N, M>(c_data);
     SMatrix::<f64, N, M>::from_array_storage(storage)
 }
-
+pub const fn projection_vol<const N:usize>() ->SMatrix<f64,N,N> {
+    const_scalar_mult(sym_id_outer_sym_id::<N>(), 1.0 / 3.0)
+}
 pub const fn projection_dev<const N: usize>() -> SMatrix<f64, N, N> {
-    let sym_id_outer_sym_id_scaled = const_scalar_mult(sym_id_outer_sym_id::<N>(), -1.0 / 3.0);
-    const_add_matrices(sym_id_outer_sym_id_scaled, id::<N>())
+    const_add_matrices(id::<N>(),const_scalar_mult(projection_vol(),-1.0))
 }

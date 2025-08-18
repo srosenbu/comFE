@@ -57,9 +57,8 @@ impl Plasticity<6, 4, 4, 1> for DruckerPrager3D {
     type Parameters = DruckerPragerParameters;
 
     fn new(parameters: &Self::Parameters) -> Self {
-        let elastic_tangent = (2.0 * parameters.mu) * const { projection_dev::<6>() }
-            + parameters.kappa * const { sym_id_outer_sym_id::<6>() };
-        let elastic_tangent_inv = elastic_tangent.try_inverse().expect("D must be invertible");
+        let elastic_tangent = isotropic_elastic_tangent(parameters.mu, parameters.kappa);
+        let elastic_tangent_inv = isotropic_elastic_tangent_inv(parameters.mu, parameters.kappa);
 
         DruckerPrager3D {
             parameters: parameters.clone(),
