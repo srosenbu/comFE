@@ -51,17 +51,16 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
         let parameters_ = LinearElasticityParameters::from_array(parameters);
         let mu = parameters_.mu;
         let kappa = parameters_.kappa;
-        // Compute lambda from kappa and mu
-        let lambda = kappa - (2.0 / 3.0) * mu;
+
+        let elastic_tangent = isotropic_elastic_tangent(mu, kappa);
+
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
 
-        stress_vec += (del_strain_vec.trace() * lambda) * const { sym_id::<6>() }
-            + (2.0 * mu) * del_strain_vec;
+        stress_vec += elastic_tangent * del_strain_vec;
 
         if let Some(tangent) = tangent {
-            let tangent_mat = isotropic_elastic_tangent(mu, kappa);
-            *tangent = tangent_mat.data.0;
+            *tangent = elastic_tangent.data.0;
         }
     }
 }

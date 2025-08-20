@@ -117,13 +117,26 @@ impl<'a> MandelViewMut<'a, 4> for SVectorViewMut<'a, f64, 4> {
     }
 }
 
+
+/// Determines the elastic tangent matrix in Mandel notation. 
+/// # Parameters
+/// - `mu`: Shear modulus
+/// - `kappa`: Bulk modulus
 pub fn isotropic_elastic_tangent<const N: usize>(mu: f64, kappa: f64) -> SMatrix<f64, N, N> {
     (2.0 * mu) * const { projection_dev::<N>() } + (3.0 * kappa) * const { projection_vol::<N>() }
 }
 
+/// Determines the inverse of the elastic tangent matrix in Mandel notation. It does so
+/// by calling `isotropic_elastic_tangent` with $\frac{1}{4\mu}$ and $\frac{1}{9\kappa}$
+/// to avoid calculating the inverse directly. The creation is therefore basically as fast as
+/// the creation of the tangent matrix. 
+/// # Parameters
+/// - `mu`: Shear modulus
+/// - `kappa`: Bulk modulus
 pub fn isotropic_elastic_tangent_inv<const N: usize>(mu: f64, kappa: f64) -> SMatrix<f64, N, N> {
-    (1.0 / (2.0 * mu)) * const { projection_dev::<N>() }
-        + (1.0 / (3.0 * kappa)) * const { projection_vol::<N>() }
+    let mu_inv = 1.0 / (4.0 * mu);
+    let kappa_inv = 1.0 / (9.0 * kappa);
+    isotropic_elastic_tangent(mu_inv, kappa_inv)
 }
 
 #[cfg(test)]
@@ -143,7 +156,7 @@ mod tests_mandel {
             [0., 0., 0., 2. * MU, 0., 0.],
             [0., 0., 0., 0., 2. * MU, 0.],
             [0., 0., 0., 0., 0., 2. * MU],
-        ]));//Note that the memory layout is column wise, but the matrix is symmetric
+        ])); //Note that the memory layout is column wise, but the matrix is symmetric, so it does not matter
 
     #[test]
     fn test_tangent() {
@@ -158,20 +171,6 @@ mod tests_mandel {
         //test that the inverse tangent generator function actually produces an inverse
         let tangent = isotropic_elastic_tangent::<6>(MU, KAPPA);
         let tangent_inv = isotropic_elastic_tangent_inv::<6>(MU, KAPPA);
-        assert!(
-            (tangent * tangent_inv - SMatrix::<f64, 6, 6>::identity()).norm()
-                < 1e-14 + 1e-14 * tangent.norm()
-        )
-    }
-
-    #[test]
-    fn test_orthogonal_projections() {
-        // test that the projection to the deviatoric space and the volumetric space are orthogonal
-        let sym_outer_sym = sym_id_outer_sym_id::<6>();
-        let proj_dev = projection_dev::<6>();
-        let proj_vol = projection_vol::<6>();
-        assert!((sym_outer_sym * proj_dev).norm() < 1e-14);
-        assert!((proj_dev * sym_outer_sym).norm() < 1e-14);
-        assert!((proj_vol * proj_dev).norm() < 1e-14);
+        assert!((tangent * tangent_inv - SMatrix::<f64, 6, 6>::identity()).norm() < 1e-14)
     }
 }

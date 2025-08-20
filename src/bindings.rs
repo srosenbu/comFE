@@ -1,7 +1,7 @@
-use crate::general_plasticity::{IsotropicPlasticity, IsotropicPlasticityModel3D};
+use crate::plasticity::{IsotropicPlasticityModel3D};
 //#[cfg(feature = "python-bindings")]
-use crate::drucker_prager_classic::DruckerPrager3D;
-use crate::interfaces::{ConstitutiveModelFn, evaluate_model};
+use crate::plasticity::DruckerPrager3D;
+use crate::interfaces::{ConstitutiveModelFn};
 use crate::linear_elasticity::LinearElasticity3D;
 use crate::mises_plasticity::MisesPlasticity3D;
 #[cfg(feature = "python-bindings")]
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 #[cfg(feature = "python-bindings")]
 #[pyclass]
-enum StressStrainConstraint {
+pub enum StressStrainConstraint {
     UNIAXIAL_STRAIN = 1,
     UNIAXIAL_STRESS = 2,
     PLANE_STRAIN = 3,
@@ -49,7 +49,7 @@ impl StressStrainConstraint {
 #[cfg(feature = "python-bindings")]
 #[macro_export]
 macro_rules! implement_python_model {
-    ($name:ident, $model:ty) => {
+    ($name:ident, $model:ty, $constr:expr) => {
         #[pyclass]
         struct $name {
             parameters: <$model as ConstitutiveModelFn<
@@ -101,24 +101,23 @@ macro_rules! implement_python_model {
             }
             #[getter]
             pub fn stress_strain_dim(&self) -> usize {
-                <$model>::STRESS_STRAIN
+                self.constraint().stress_strain_dim()
             }
             #[getter]
             pub fn geometric_dim(&self) -> usize {
-                match <$model>::STRESS_STRAIN {
-                    6 => 3,
-                    4 => 2,
-                    1 => 1,
-                    _ => panic!("Unsupported stress-strain dimension"),
-                }
+                self.constraint().geometric_dim()
+            }
+            #[getter]
+            pub fn constraint(&self) -> StressStrainConstraint {
+                $constr
             }
         }
     };
 }
 
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D);
+implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D, StressStrainConstraint::FULL);
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyLinearElasticity3D, LinearElasticity3D);
+implement_python_model!(PyLinearElasticity3D, LinearElasticity3D, StressStrainConstraint::FULL);
 #[cfg(feature = "python-bindings")]
-implement_python_model!(PyDruckerPrager3D, IsotropicPlasticityModel3D<4,4,DruckerPrager3D>);
+implement_python_model!(PyDruckerPrager3D, IsotropicPlasticityModel3D<4,4,DruckerPrager3D>, StressStrainConstraint::FULL);

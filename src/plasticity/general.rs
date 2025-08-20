@@ -37,13 +37,7 @@ pub trait Plasticity<
     fn elastic_tangent_inv(&self) -> &SMatrix<f64, STRESS_STRAIN, STRESS_STRAIN>;
     fn del_plastic_strain(&self) -> &SVector<f64, STRESS_STRAIN>;
 }
-pub trait IsotropicPlasticity<
-    const STRESS_STRAIN: usize,
-    const N_PARAMETERS: usize,
-    const PARAMETERS: usize,
->: Plasticity<STRESS_STRAIN, N_PARAMETERS, PARAMETERS, 1>
-{
-}
+
 pub struct IsotropicPlasticityModel3D<
     const N_PARAMETERS: usize,
     const PARAMETERS: usize,
