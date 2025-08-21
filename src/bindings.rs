@@ -115,9 +115,19 @@ macro_rules! implement_python_model {
     };
 }
 
-#[cfg(feature = "python-bindings")]
-implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D, StressStrainConstraint::FULL);
-#[cfg(feature = "python-bindings")]
-implement_python_model!(PyLinearElasticity3D, LinearElasticity3D, StressStrainConstraint::FULL);
-#[cfg(feature = "python-bindings")]
-implement_python_model!(PyDruckerPrager3D, IsotropicPlasticityModel3D<4,4,DruckerPrager3D>, StressStrainConstraint::FULL);
+
+
+mod tests_bindings {
+    use super::*;
+
+
+    #[test]
+    fn test_python() {
+        #[cfg(feature = "python-bindings")]
+        implement_python_model!(PyMisesPlasticity3D, MisesPlasticity3D, StressStrainConstraint::FULL);
+        #[cfg(feature = "python-bindings")]
+        implement_python_model!(PyLinearElasticity3D, LinearElasticity3D, StressStrainConstraint::FULL);
+        #[cfg(feature = "python-bindings")]
+        implement_python_model!(PyDruckerPrager3D, IsotropicPlasticityModel3D<4,4,DruckerPrager3D>, StressStrainConstraint::FULL);
+    }
+}
