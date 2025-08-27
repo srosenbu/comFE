@@ -2,6 +2,10 @@
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
+[project]
+name = "comfe"
+
+
 [tool.maturin]
 # Point to the Rust extension crate, relative to pyproject.toml location
 bindings = "pyo3"
@@ -10,4 +14,3 @@ manifest-path = "comfe-py/Cargo.toml"
 features = ["pyo3/extension-module"]
 python-source = "python"
 # If you want to rename the Python package, set "name" here
-# name = "mypackage"

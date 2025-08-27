@@ -75,7 +75,7 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
         let (eps_trace, eps_dev) = del_strain_vec.trace_dev();
         let p_1 = p_0 + kappa * eps_trace;
 
-        let s_tr = s_0 + 2. * mu * eps_dev;
+        let s_tr = &s_0 + (2. * mu) * &eps_dev;
         let s_tr_eq = s_tr.mises_norm();
 
         let sigma_y = y_0 + h * alpha;
@@ -85,7 +85,7 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
             // Elastic step
             stress_vec.copy_from(&(p_1 * SYM_ID + s_tr));
             if let Some(tangent) = tangent {
-                *tangent = (kappa * SYM_ID_OUTER_SYM_ID + 2. * mu * PROJECTION_DEV)
+                *tangent = (kappa * &SYM_ID_OUTER_SYM_ID + (2. * mu) * &PROJECTION_DEV)
                     .data
                     .0;
             }
@@ -98,16 +98,16 @@ impl ConstitutiveModelFn<6, 2, 7, 4, 4> for MisesPlasticity3D {
             // Update the equivalent plastic strain
             // determine the plastic strain
             let n = s_tr / s_tr_eq;
-            history_.plastic_strain += del_gamma * n;
+            history_.plastic_strain += del_gamma * &n;
             history_.alpha += del_alpha;
 
-            stress_vec.copy_from(&(p_1 * SYM_ID + theta * s_tr));
+            stress_vec.copy_from(&(p_1 * &SYM_ID + theta * &s_tr));
 
             if let Some(tangent) = tangent {
                 let theta_bar = 1.0 / (1.0 + (h / (3.0 * mu))) - (1.0 - theta);
-                let tangent_new = kappa * SYM_ID_OUTER_SYM_ID
-                    + 2.0 * mu * theta * PROJECTION_DEV
-                    + 2.0 * mu * theta_bar * n * n.transpose();
+                let tangent_new = kappa * &SYM_ID_OUTER_SYM_ID
+                    + (2.0 * mu * theta) * &PROJECTION_DEV
+                    + (2.0 * mu * theta_bar) * &n * &n.transpose();
                 // Copy the tangent matrix to the output
                 *tangent = tangent_new.data.0;
             }

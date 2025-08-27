@@ -1,21 +1,22 @@
 use crate::consts::*;
-use crate::plasticity::*;
 use crate::impl_array_equivalent;
 use crate::interfaces::*;
 use crate::mandel::*;
+use crate::plasticity::*;
 use crate::{create_history_parameter_struct, q_dim_data_type};
 //use crate::impl_from_array;
 use nalgebra::{SMatrix, SVector};
 
 create_history_parameter_struct!(
     DruckerPragerParameters,
-    4,
-    4,
+    5,
+    5,
     [
         (mu, (QDim::Scalar)),
         (kappa, (QDim::Scalar)),
         (a, (QDim::Scalar)),
-        (b, (QDim::Scalar))
+        (b, (QDim::Scalar)),
+        (b_flow, (QDim::Scalar))
     ]
 );
 /// A classic Drucker-Prager plasticity model for 3D stress states.
@@ -24,7 +25,9 @@ create_history_parameter_struct!(
 /// The yield function is defined as: $f = \sqrt{J_2} + b\cdot I_1 - a$, where:
 /// - $J_2$ is the second invariant of the deviatoric stress tensor
 /// - $I_1$ is the first invariant of the stress tensor
-/// - $a$ and $b$ are material parameters.
+/// - $a$ and $b$ are material parameters that describe the yield surface.
+/// - $b_{flow}$ defines the slope of the flow rule which is equal to $b$ for associated flow. For $b=0$ the return direction is purely deviatoric (radial return algorithm)
+///
 ///
 /// This struct does not implement the stress return algorithm but implements
 /// the required functions like the yield function, flow rule, etc.
@@ -36,6 +39,7 @@ create_history_parameter_struct!(
 /// - `kappa`: Bulk modulus
 /// - `a`: slope of the yield surface in $I_1,\sqrt{J_2}$ space
 /// - `b`: Yield strength at zero pressure
+/// - `b_flow`: slope of the flow-potential, use `b_flow=b` for associated flow
 #[derive(Default, Clone, Copy)]
 pub struct DruckerPrager3D {
     parameters: DruckerPragerParameters,
@@ -53,7 +57,7 @@ pub struct DruckerPrager3D {
     del_plastic_strain: SVector<f64, 6>,
 }
 
-impl Plasticity<6, 4, 4, 1> for DruckerPrager3D {
+impl Plasticity<6, 5, 5, 1> for DruckerPrager3D {
     type Parameters = DruckerPragerParameters;
 
     fn new(parameters: &Self::Parameters) -> Self {
@@ -83,18 +87,27 @@ impl Plasticity<6, 4, 4, 1> for DruckerPrager3D {
         let _df_di_1i_1 = 0.0;
         let df_dj_2j_2 = -0.25 / (j_2 * j_2.sqrt());
 
-        self.df_dsigma = df_di_1 * SYM_ID + df_dj_2 * s;
-        self.g = self.df_dsigma.clone();
-        self.dg_dsigma = s * df_dj_2j_2 * s.transpose() + df_dj_2 * PROJECTION_DEV;
+        self.df_dsigma = df_di_1 * &SYM_ID + df_dj_2 * &s;
+        self.g = {
+            if self.parameters.b == self.parameters.b_flow {
+                // associated flow
+                self.df_dsigma.clone()
+            } else {
+                //non-associated flow
+                self.parameters.b_flow * &SYM_ID + df_dj_2 * &s
+            }
+        };
+        // This derivative is the same for both associated and non-associated flow
+        self.dg_dsigma = &s * df_dj_2j_2 * &s.transpose() + df_dj_2 * &PROJECTION_DEV;
 
-        self.del_plastic_strain = del_eps - self.elastic_tangent_inv * (sigma_1 - sigma_0);
+        self.del_plastic_strain = del_eps - &self.elastic_tangent_inv * (sigma_1 - sigma_0);
         let pl_norm = self.del_plastic_strain.norm();
         self.k = SMatrix::from_element(f64::sqrt(2. / 3.) * pl_norm);
         self.dk_dsigma = {
             if pl_norm == 0.0 {
                 SMatrix::zeros()
             } else {
-                (-f64::sqrt(2. / 3.) * self.elastic_tangent_inv * self.del_plastic_strain / pl_norm)
+                (-f64::sqrt(2. / 3.) * &self.elastic_tangent_inv * &self.del_plastic_strain / pl_norm)
                     .transpose()
             }
         };

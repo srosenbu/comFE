@@ -1,9 +1,10 @@
 use crate::consts::*;
 use nalgebra::{
-    Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector, coordinates::XYZWAB,
+    coordinates::XYZWAB, Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector, SVD
 };
 
 pub trait Mandel<const DIM: usize> {
+
     fn trace(&self) -> f64;
 
     fn vol_dev(&self) -> (f64, SVector<f64, DIM>);
@@ -29,6 +30,7 @@ pub trait Mandel<const DIM: usize> {
         let j_2 = self.j_2();
         (3.0 * j_2).sqrt()
     }
+
 }
 
 pub trait MandelMut<const DIM: usize>: Mandel<DIM> {
@@ -123,7 +125,7 @@ impl<'a> MandelViewMut<'a, 4> for SVectorViewMut<'a, f64, 4> {
 /// - `mu`: Shear modulus
 /// - `kappa`: Bulk modulus
 pub fn isotropic_elastic_tangent<const N: usize>(mu: f64, kappa: f64) -> SMatrix<f64, N, N> {
-    (2.0 * mu) * const { projection_dev::<N>() } + (3.0 * kappa) * const { projection_vol::<N>() }
+    (2.0 * mu) * const { &projection_dev::<N>() } + (3.0 * kappa) * const { &projection_vol::<N>() }
 }
 
 /// Determines the inverse of the elastic tangent matrix in Mandel notation. It does so
