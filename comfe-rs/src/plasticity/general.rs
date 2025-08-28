@@ -69,7 +69,7 @@ impl<
     fn evaluate(
         _time: f64,
         _del_time: f64,
-        _strain: &[f64; 6],
+        //_strain: &[f64; 6],
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
         tangent: Option<&mut [[f64; 6]; 6]>,

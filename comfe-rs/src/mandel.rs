@@ -1,10 +1,11 @@
+use core::f64;
+
 use crate::consts::*;
 use nalgebra::{
-    coordinates::XYZWAB, Const, SMatrix, SVector, SVectorView, SVectorViewMut, Storage, Vector, SVD
+    Const, SMatrix, SVD, SVector, SVectorView, SVectorViewMut, Storage, Vector, coordinates::XYZWAB,
 };
 
 pub trait Mandel<const DIM: usize> {
-
     fn trace(&self) -> f64;
 
     fn vol_dev(&self) -> (f64, SVector<f64, DIM>);
@@ -30,7 +31,6 @@ pub trait Mandel<const DIM: usize> {
         let j_2 = self.j_2();
         (3.0 * j_2).sqrt()
     }
-
 }
 
 pub trait MandelMut<const DIM: usize>: Mandel<DIM> {
@@ -119,8 +119,7 @@ impl<'a> MandelViewMut<'a, 4> for SVectorViewMut<'a, f64, 4> {
     }
 }
 
-
-/// Determines the elastic tangent matrix in Mandel notation. 
+/// Determines the elastic tangent matrix in Mandel notation.
 /// # Parameters
 /// - `mu`: Shear modulus
 /// - `kappa`: Bulk modulus
@@ -131,7 +130,7 @@ pub fn isotropic_elastic_tangent<const N: usize>(mu: f64, kappa: f64) -> SMatrix
 /// Determines the inverse of the elastic tangent matrix in Mandel notation. It does so
 /// by calling `isotropic_elastic_tangent` with $\frac{1}{4\mu}$ and $\frac{1}{9\kappa}$
 /// to avoid calculating the inverse directly. The creation is therefore basically as fast as
-/// the creation of the tangent matrix. 
+/// the creation of the tangent matrix.
 /// # Parameters
 /// - `mu`: Shear modulus
 /// - `kappa`: Bulk modulus
@@ -141,8 +140,40 @@ pub fn isotropic_elastic_tangent_inv<const N: usize>(mu: f64, kappa: f64) -> SMa
     isotropic_elastic_tangent(mu_inv, kappa_inv)
 }
 
+pub fn nonsymmetric_tensor_to_mandel<const GDIM: usize, const SDIM: usize>(
+    tensor: [[f64; GDIM]; GDIM],
+) -> [f64; SDIM] {
+    let mut output = [0.0; SDIM];
+    let factor = f64::consts::FRAC_1_SQRT_2;
+    const X_INDICES: [usize; 3] = [0, 0, 1];
+    const Y_INDICES: [usize; 3] = [1, 2, 2];
+    let n_shear: usize = const {
+        if GDIM == 3 {
+            3
+        } else if GDIM == 2 {
+            1
+        } else if GDIM == 1 {
+            0
+        } else {
+            panic!("Unknowm geometric dimension");
+        }
+    };
+    for i in 0..GDIM {
+        // diagonal elements
+        output[i] = tensor[i][i];
+    }
+    for i in 0..n_shear {
+        let x_index = X_INDICES[i];
+        let y_index = Y_INDICES[i];
+        output[3 + i] = factor * (tensor[x_index][y_index] + tensor[y_index][x_index]);
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests_mandel {
+    use core::f64;
+
     use nalgebra::ArrayStorage;
 
     use super::*;
@@ -159,6 +190,19 @@ mod tests_mandel {
             [0., 0., 0., 0., 2. * MU, 0.],
             [0., 0., 0., 0., 0., 2. * MU],
         ])); //Note that the memory layout is column wise, but the matrix is symmetric, so it does not matter
+    static gradient_3d: [[f64; 3]; 3] = [[1., 2., 3.], [4., 5., 6.], [7., 8., 9.]];
+    static gradient_2d: [[f64;2];2] = [[1.,2.],[3.,4.]];
+    static gradient_1d: [[f64;1];1] = [[1.]];
+    static strain_3d: [f64; 6] = [
+        1.,
+        5.,
+        9.,
+        (2. + 4.) * f64::consts::FRAC_1_SQRT_2,
+        (3. + 7.) * f64::consts::FRAC_1_SQRT_2,
+        (6. + 8.) * f64::consts::FRAC_1_SQRT_2,
+    ];
+    static strain_2d:[f64;4] = [1.,4., 0., (2.+3.)*f64::consts::FRAC_1_SQRT_2];
+    static strain_1d:[f64;1] = [1.];
 
     #[test]
     fn test_tangent() {
@@ -175,4 +219,26 @@ mod tests_mandel {
         let tangent_inv = isotropic_elastic_tangent_inv::<6>(MU, KAPPA);
         assert!((tangent * tangent_inv - SMatrix::<f64, 6, 6>::identity()).norm() < 1e-14)
     }
+    #[test]
+    fn test_nonsymmetric_to_mandel_3d() {
+        let strain: [f64; 6] = nonsymmetric_tensor_to_mandel(gradient_3d);
+        let strain_vec = SVector::<f64, 6>::from_column_slice(&strain);
+        let strain_solution = SVector::<f64, 6>::from_column_slice(&strain_3d);
+        assert!((strain_vec - strain_solution).norm() < 1e-14);
+    }
+    #[test]
+    fn test_nonsymmetric_to_mandel_2d() {
+        let strain: [f64; 4] = nonsymmetric_tensor_to_mandel(gradient_2d);
+        let strain_vec = SVector::<f64, 4>::from_column_slice(&strain);
+        let strain_solution = SVector::<f64, 4>::from_column_slice(&strain_2d);
+        assert!((strain_vec - strain_solution).norm() < 1e-14);
+    }
+    #[test]
+    fn test_nonsymmetric_to_mandel_1d() {
+        let strain: [f64; 1] = nonsymmetric_tensor_to_mandel(gradient_1d);
+        let strain_vec = SVector::<f64, 1>::from_column_slice(&strain);
+        let strain_solution = SVector::<f64, 1>::from_column_slice(&strain_1d);
+        assert!((strain_vec - strain_solution).norm() < 1e-14);
+    }
+
 }

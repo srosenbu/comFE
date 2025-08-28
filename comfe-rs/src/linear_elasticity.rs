@@ -40,7 +40,7 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
     fn evaluate(
         _time: f64,
         _del_time: f64,
-        _strain: &[f64; 6],
+        //_strain: &[f64; 6],
         del_strain: &[f64; 6],
         stress: &mut [f64; 6],
         tangent: Option<&mut [[f64; 6]; 6]>,
@@ -68,20 +68,20 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
 pub unsafe fn linear_elasticity3d_fn(
     time: c_double,
     del_time: c_double,
-    strain: *const c_double,
+    //strain: *const c_double,
     del_strain: *const c_double,
     stress: *mut c_double,
     tangent: *const c_double,
     history: *mut c_double,
     parameters: *const c_double,
 ) {
-    let strain = unsafe { &*(strain as *const [f64; 6]) };
+    //let strain = unsafe { &*(strain as *const [f64; 6]) };
     let del_strain = unsafe { &*(del_strain as *const [f64; 6]) };
     let stress = unsafe { &mut *(stress as *mut [f64; 6]) };
     let tangent = Some(unsafe { &mut *(tangent as *mut [[f64; 6]; 6]) });
     let history = unsafe { &mut *(history as *mut [f64; 0]) };
     let parameters = unsafe { &*(parameters as *const [f64; 2]) };
     LinearElasticity3D::evaluate(
-        time, del_time, strain, del_strain, stress, tangent, history, parameters,
+        time, del_time, del_strain, stress, tangent, history, parameters,
     );
 }

@@ -3,10 +3,39 @@ use std::num::NonZeroUsize;
 
 use crate::{
     consts::*,
-    mandel::{MandelView, MandelViewMut},
+    mandel::{nonsymmetric_tensor_to_mandel, MandelView, MandelViewMut},
 };
 use konst::{const_eq, eq_str};
 use nalgebra::{SMatrix, SMatrixViewMut, SVector, SVectorView, SVectorViewMut, Scalar};
+
+
+pub enum StressStrainConstraint {
+    UNIAXIAL_STRAIN = 1,
+    UNIAXIAL_STRESS = 2,
+    PLANE_STRAIN = 3,
+    PLANE_STRESS = 4,
+    FULL = 5,
+}
+impl StressStrainConstraint {
+    pub const fn stress_strain_dim(&self) -> usize {
+        match self {
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 4,
+            StressStrainConstraint::PLANE_STRESS => 4,
+            StressStrainConstraint::FULL => 6,
+        }
+    }
+    pub const fn geometric_dim(&self) -> usize {
+        match self {
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 2,
+            StressStrainConstraint::PLANE_STRESS => 2,
+            StressStrainConstraint::FULL => 3,
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -187,7 +216,7 @@ where
     fn evaluate(
         time: f64,
         del_time: f64,
-        strain: &[f64; STRESS_STRAIN],
+        //strain: &[f64; STRESS_STRAIN],
         del_strain: &[f64; STRESS_STRAIN],
         stress: &mut [f64; STRESS_STRAIN],
         tangent: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]>,
@@ -195,20 +224,20 @@ where
         parameters: &[f64; PARAMETERS],
     );
 
-    fn evaluate_all(
-        time: f64,
-        del_time: f64,
-        strain: &[f64],
-        del_strain: &[f64],
-        stress: &mut [f64],
-        tangent: Option<&mut [f64]>,
-        history: &mut [f64],
-        parameters: &[f64],
-    ) {
-        evaluate_model::<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS, Self>(
-            time, del_time, strain, del_strain, stress, tangent, history, parameters
-        );
-    }
+    //fn evaluate_all(
+    //    time: f64,
+    //    del_time: f64,
+    //    //strain: &[f64],
+    //    del_strain: &[f64],
+    //    stress: &mut [f64],
+    //    tangent: Option<&mut [f64]>,
+    //    history: &mut [f64],
+    //    parameters: &[f64],
+    //) {
+    //    evaluate_model::<STRESS_STRAIN, N_HISTORY, HISTORY, N_PARAMETERS, PARAMETERS, Self>(
+    //        time, del_time, del_strain, stress, tangent, history, parameters
+    //    );
+    //}
 }
 
 trait SmallStrainConstitutiveModel<
@@ -233,7 +262,7 @@ where
     fn evaluate(
         time: f64,
         del_time: f64,
-        strain: &SVector<f64, STRESS_STRAIN>,
+        //strain: &SVector<f64, STRESS_STRAIN>,
         del_strain: &SVector<f64, STRESS_STRAIN>,
         stress: &mut SVector<f64,STRESS_STRAIN>,
         tangent: Option<&mut SMatrix<f64,STRESS_STRAIN,STRESS_STRAIN>>,
@@ -244,7 +273,7 @@ where
     fn evaluate_all(
         time: f64,
         del_time: f64,
-        strain: &[f64],
+        //strain: &[f64],
         del_strain: &[f64],
         stress: &mut [f64],
         tangent: Option<&mut [f64]>,
@@ -286,6 +315,7 @@ pub const fn check_constitutive_model_maps<
 /// Panics if the sizes of the input are inconsistent.
 pub fn evaluate_model<
     const STRESS_STRAIN: usize,
+    const GEOMETRY: usize,
     const N_HISTORY: usize,
     const HISTORY: usize,
     const N_PARAMETERS: usize,
@@ -294,8 +324,8 @@ pub fn evaluate_model<
 >(
     time: f64,
     del_time: f64,
-    strain: &[f64],
-    del_strain: &[f64],
+    //strain: &[f64],
+    del_grad_u: &[f64],
     stress: &mut [f64],
     tangent: Option<&mut [f64]>,
     history: &mut [f64],
@@ -308,8 +338,10 @@ pub fn evaluate_model<
     ));
 
     let (stress_, stress_rest) = stress.as_chunks_mut::<STRESS_STRAIN>();
-    let (strain_, strain_rest) = strain.as_chunks::<STRESS_STRAIN>();
-    let (del_strain_, del_strain_rest) = del_strain.as_chunks::<STRESS_STRAIN>();
+    //let (strain_, strain_rest) = strain.as_chunks::<STRESS_STRAIN>();
+    let (del_grad_u_, del_grad_u_rest) = del_grad_u.as_chunks::<GEOMETRY>();
+    let (del_grad_u_, del_grad_u_rest) = del_grad_u_.as_chunks::<GEOMETRY>();
+
     let (history_, history_rest) = history.as_chunks_mut::<HISTORY>();
     let mut tangent_ = {
         match tangent {
@@ -323,45 +355,45 @@ pub fn evaluate_model<
     };
 
     let stress_len = stress_.len();
-    let del_strain_len = del_strain_.len();
-    let strain_len = strain_.len();
+    //let del_strain_len = del_strain_.len();
+    let del_grad_u_len = del_grad_u_.len();
     let history_len = history_.len();
     let tangent_len = tangent_.as_ref().map_or(0, |t| t.len());
 
     assert!(
-        stress_len == del_strain_len
-            && stress_len == strain_len
+        stress_len == del_grad_u_len
+            //&& stress_len == strain_len
             && stress_len == history_len
             && (stress_len == tangent_len || tangent_.is_none()),
         "Stress, strain, history, and tangent lengths do not match: \
-        stress_len: {}, strain_len: {}, del_strain_len: {}, history_len: {}, tangent_len: {}",
+        stress_len: {}, del_grad_u_len: {}, history_len: {}, tangent_len: {}",
         stress_len,
-        strain_len,
-        del_strain_len,
+        //strain_len,
+        del_grad_u_len,
         history_len,
         tangent_len
     );
     assert!(
         stress_rest.is_empty()
-            && del_strain_rest.is_empty()
+            && del_grad_u_rest.is_empty()
             && history_rest.is_empty()
             && tangent_.as_ref().map_or(true, |t| t.is_empty()),
         "Input slices are not of the correct length: \
-        stress_rest: {:?}, del_strain_rest: {:?}, history_rest: {:?}",
+        stress_rest: {:?}, del_grad_u_rest: {:?}, history_rest: {:?}",
         stress_rest,
-        del_strain_rest,
+        del_grad_u_rest,
         history_rest
     );
 
     for i in 0..stress_len {
         let tangent_chunk: Option<&mut [[f64; STRESS_STRAIN]; STRESS_STRAIN]> =
             tangent_.as_mut().map(|t| &mut t[i]);
-
+        let del_strain_chunk: [f64;STRESS_STRAIN] = nonsymmetric_tensor_to_mandel(del_grad_u_[i]);
         MODEL::evaluate(
             time,
             del_time,
-            &strain_[i],
-            &del_strain_[i],
+            //&strain_[i],
+            &del_strain_chunk,
             &mut stress_[i],
             tangent_chunk,
             &mut history_[i],
