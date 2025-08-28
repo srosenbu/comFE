@@ -14,7 +14,7 @@ pub enum StressStrainConstraint {
     UniaxialStress = 2,
     PlaneStrain = 3,
     PlaneStress = 4,
-    FULL = 5,
+    Full = 5,
 }
 #[pymethods]
 impl StressStrainConstraint {
@@ -25,7 +25,7 @@ impl StressStrainConstraint {
             StressStrainConstraint::UniaxialStress => 1,
             StressStrainConstraint::PlaneStrain => 4,
             StressStrainConstraint::PlaneStress => 4,
-            StressStrainConstraint::FULL => 6,
+            StressStrainConstraint::Full => 6,
         }
     }
     #[getter]
@@ -35,7 +35,7 @@ impl StressStrainConstraint {
             StressStrainConstraint::UniaxialStress => 1,
             StressStrainConstraint::PlaneStrain => 2,
             StressStrainConstraint::PlaneStress => 2,
-            StressStrainConstraint::FULL => 3,
+            StressStrainConstraint::Full => 3,
         }
     }
 }
@@ -136,19 +136,19 @@ fn comfe_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m,
         PyLinearElasticity3D,
         LinearElasticity3D,
-        StressStrainConstraint::FULL
+        StressStrainConstraint::Full
     );
     implement_python_model!(
         m,
         PyMisesPlasticity3D,
         MisesPlasticity3D,
-        StressStrainConstraint::FULL
+        StressStrainConstraint::Full
     );
     implement_python_model!(
         m,
         PyDruckerPrager3D,
         IsotropicPlasticityModel3D<5,5, DruckerPrager3D>,
-        StressStrainConstraint::FULL
+        StressStrainConstraint::Full
     );
 
     Ok(())
