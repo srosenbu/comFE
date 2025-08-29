@@ -10,3 +10,5 @@ dependencies:
   - pip
   - pip:
       - -e .
+      # fenics-constitutive
+      -  git+https://github.com/BAMresearch/fenics-constitutive.git@ee3f2f8744d0e1f39090ffac176c637c294fbf5a

@@ -1,1 +1,1 @@
-import comfe_py
+import comfe.models

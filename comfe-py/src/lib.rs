@@ -10,32 +10,32 @@ use std::collections::HashMap;
 
 #[pyclass]
 pub enum StressStrainConstraint {
-    UniaxialStrain = 1,
-    UniaxialStress = 2,
-    PlaneStrain = 3,
-    PlaneStress = 4,
-    Full = 5,
+    UNIAXIAL_STRAIN = 1,
+    UNIAXIAL_STRESS = 2,
+    PLANE_STRAIN = 3,
+    PLANE_STRESS = 4,
+    FULL = 5,
 }
 #[pymethods]
 impl StressStrainConstraint {
     #[getter]
     pub const fn stress_strain_dim(&self) -> usize {
         match self {
-            StressStrainConstraint::UniaxialStrain => 1,
-            StressStrainConstraint::UniaxialStress => 1,
-            StressStrainConstraint::PlaneStrain => 4,
-            StressStrainConstraint::PlaneStress => 4,
-            StressStrainConstraint::Full => 6,
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 4,
+            StressStrainConstraint::PLANE_STRESS => 4,
+            StressStrainConstraint::FULL => 6,
         }
     }
     #[getter]
     pub const fn geometric_dim(&self) -> usize {
         match self {
-            StressStrainConstraint::UniaxialStrain => 1,
-            StressStrainConstraint::UniaxialStress => 1,
-            StressStrainConstraint::PlaneStrain => 2,
-            StressStrainConstraint::PlaneStress => 2,
-            StressStrainConstraint::Full => 3,
+            StressStrainConstraint::UNIAXIAL_STRAIN => 1,
+            StressStrainConstraint::UNIAXIAL_STRESS => 1,
+            StressStrainConstraint::PLANE_STRAIN => 2,
+            StressStrainConstraint::PLANE_STRESS => 2,
+            StressStrainConstraint::FULL => 3,
         }
     }
 }
@@ -79,12 +79,16 @@ macro_rules! implement_python_model {
                 del_grad_u: PyReadonlyArray1<f64>,
                 mut stress: PyReadwriteArray1<f64>,
                 mut tangent: Option<PyReadwriteArray1<f64>>,
-                mut history: PyReadwriteArray1<f64>,
+                mut history: HashMap<String, PyReadwriteArray1<f64>>,
             ) {
                 //let strain = strain.as_slice().unwrap();
                 let del_grad_u = del_grad_u.as_slice().unwrap();
                 let mut stress = stress.as_slice_mut().unwrap();
-                let mut history = history.as_slice_mut().unwrap();
+                let mut history = history
+                    .get_mut("history")
+                    .expect("'history' entry not found in input")
+                    .as_slice_mut()
+                    .unwrap();
                 let parameters = self.parameters.as_array();
                 let tangent = tangent.as_mut();
                 let tangent = match tangent {
@@ -110,8 +114,8 @@ macro_rules! implement_python_model {
                 );
             }
             #[getter]
-            pub fn history_dim(&self) -> HashMap<&str, usize> {
-                HashMap::from([("history", <$model>::HISTORY)])
+            pub fn history_dim(&self) -> HashMap<String, usize> {
+                HashMap::from([("history".to_string(), <$model>::HISTORY)])
             }
             #[getter]
             pub fn stress_strain_dim(&self) -> usize {
@@ -136,19 +140,19 @@ fn comfe_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m,
         PyLinearElasticity3D,
         LinearElasticity3D,
-        StressStrainConstraint::Full
+        StressStrainConstraint::FULL
     );
     implement_python_model!(
         m,
         PyMisesPlasticity3D,
         MisesPlasticity3D,
-        StressStrainConstraint::Full
+        StressStrainConstraint::FULL
     );
     implement_python_model!(
         m,
         PyDruckerPrager3D,
         IsotropicPlasticityModel3D<5,5, DruckerPrager3D>,
-        StressStrainConstraint::Full
+        StressStrainConstraint::FULL
     );
 
     Ok(())
