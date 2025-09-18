@@ -57,7 +57,7 @@ impl ConstitutiveModelFn<6, 0, 0, 2, 2> for LinearElasticity3D {
         let del_strain_vec = SVectorView::<f64, 6>::from_array(del_strain);
         let mut stress_vec = SVectorViewMut::<f64, 6>::from_array(stress);
 
-        stress_vec += elastic_tangent * del_strain_vec;
+        stress_vec += &elastic_tangent * &del_strain_vec;
 
         if let Some(tangent) = tangent {
             *tangent = elastic_tangent.data.0;

@@ -8,11 +8,13 @@ __all__ = ["DruckerPrager3D", "MisesPlasticity3D", "LinearElasticity3D"]
 
 def fenics_constitutive_wrapper(rust_model):
     def decorator(cls):
+        assert issubclass(cls, IncrSmallStrainModel), (
+            "decorator can only be used on subclasses of IncrSmallStrainModel"
+        )
+
         # Overwrite __init__
         def __init__(self, parameters: np.ndarray) -> None:
             self.model = rust_model(parameters)
-
-        cls.__init__ = __init__
 
         # Add evaluate method
         def evaluate(
@@ -24,7 +26,6 @@ def fenics_constitutive_wrapper(rust_model):
             tangent: np.ndarray,
             history: dict[str, np.ndarray] | None,
         ) -> None:
-            # Your implementation here
             self.model.evaluate(
                 t,
                 del_t,
@@ -33,8 +34,6 @@ def fenics_constitutive_wrapper(rust_model):
                 tangent,
                 history,
             )
-
-        cls.evaluate = evaluate
 
         # Add constraint property
         def constraint(self) -> StressStrainConstraint:
@@ -48,14 +47,28 @@ def fenics_constitutive_wrapper(rust_model):
             )
             return StressStrainConstraint[str(self.model.constraint).split(".")[-1]]
 
-        cls.constraint = property(constraint)
-
         # Add history_dim property
         def history_dim(self) -> dict[str, int | tuple[int, int]] | None:
             # Your implementation here
             return self.model.history_dim
 
+        cls.__init__ = __init__
+
+        cls.evaluate = evaluate
+
+        cls.constraint = property(constraint)
+
         cls.history_dim = property(history_dim)
+
+        # check that the only abstract fields in cls are the ones that we define
+        assert (
+            "evaluate" in cls.__abstractmethods__
+            and "constraint" in cls.__abstractmethods__
+            and "history_dim" in cls.__abstractmethods__
+            and len(cls.__abstractmethods__) == 3
+        )
+
+        # empty the abstract methods field to signal that all methods are overwritten
         cls.__abstractmethods__ = frozenset()
         return cls
 
