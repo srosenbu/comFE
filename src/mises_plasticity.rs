@@ -309,64 +309,69 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
             );
         let mut d_eps = mandel_rate_from_velocity_gradient(&velocity_gradient);
         let youngs_modulus = 9. * self.mu * self.kappa / (self.mu + 3.*self.kappa);
-        let poisson_ratio = youngs_modulus / (2. * self.mu) - 1.0;
-        d_eps.y = - poisson_ratio * d_eps.x;
-        d_eps.z = - poisson_ratio * d_eps.x;
+        //let poisson_ratio = youngs_modulus / (2. * self.mu) - 1.0;
+        //d_eps.y = - poisson_ratio * d_eps.x;
+        //d_eps.z = - poisson_ratio * d_eps.x;
 
-        let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
-        d_eps_vol *= -1.0;
+        //let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
+        //d_eps_vol *= -1.0;
         
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
-        let lambda_0 = input.get_scalar(Q::EqPlasticStrain, ip);
+        let alpha_0 = input.get_scalar(Q::EqPlasticStrain, ip);
 
-        let (p_0, s_0) = mandel_decomposition(&sigma_0);
+        //let (p_0, s_0) = mandel_decomposition(&sigma_0);
         //let p_1 = p_0 - self.kappa * d_eps_vol * del_t;
-        let s_tr = s_0 + 2. * self.mu * d_eps_dev * del_t;
+        let sigma_tr = youngs_modulus * &d_eps * del_t + &sigma_0;
+        let (p_tr, s_tr) = mandel_decomposition(&sigma_tr);
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
 
-        let mut sigma_y = self.sigma_y * (f64::exp(-lambda_0 / self.e_f));
+        let mut sigma_y = self.sigma_y * (f64::exp(-alpha_0 / self.e_f));
         //the .max(0.0) contains the check if the stress is already above the yield surface
-        let mut del_lambda = 0.0;
-        let mut lambda_1 = lambda_0;
-        let mut lambda_1_old:f64;
+        let mut del_alpha = 0.0;
+        let mut alpha_1 = alpha_0;
+        let mut alpha_1_old:f64;
         let mut f:f64;
         let mut df:f64;
-        let alpha;
+        let theta;
         if s_tr_eq > sigma_y {
             let mut iter = 0;
             let mut dsigma_y:f64;
             loop{
-                lambda_1_old = lambda_1;
-                sigma_y = self.sigma_y * (f64::exp(-lambda_1 / self.e_f));
-                dsigma_y = self.sigma_y * (-1. / self.e_f) * f64::exp(-lambda_1 / self.e_f);
-                f = sigma_y - s_tr_eq + 3.*self.mu*del_lambda;
+                alpha_1_old = alpha_1;
+                sigma_y = self.sigma_y * (f64::exp(-alpha_1 / self.e_f));
+                dsigma_y = self.sigma_y * (-1. / self.e_f) * f64::exp(-alpha_1 / self.e_f);
+                f = sigma_y - s_tr_eq + 3.*self.mu*del_alpha;
                 df = dsigma_y + 3.*self.mu;
-                lambda_1 = lambda_1 - f/df;
-                del_lambda = lambda_1 - lambda_0;
+                alpha_1 = alpha_1 - f/df;
+                del_alpha = alpha_1 - alpha_0;
                 
                 iter += 1;
                 //println!("iter: {}, lambda_1: {}, e/l1: {}, f: {}", iter, lambda_1, (lambda_1-lambda_1_old).abs()/lambda_1.abs(), f);
-                if (lambda_1-lambda_1_old).abs()/lambda_1.abs() < 1e-5 || f.abs() < 1e-8 {
+                if (alpha_1-alpha_1_old).abs()/alpha_1.abs() < 1e-5 || f.abs() < 1e-8 {
                     break;
                 } else if iter > 100 {
-                    println!("sigma_y_0: {}, sigma_y: {}, s_tr_eq: {}, lambda_0: {}, lambda_1: {}", self.sigma_y*(1.-f64::exp(-lambda_0/self.e_f)) ,sigma_y, s_tr_eq, lambda_0, lambda_1);
+                    println!("sigma_y_0: {}, sigma_y: {}, s_tr_eq: {}, lambda_0: {}, lambda_1: {}", self.sigma_y*(1.-f64::exp(-alpha_0/self.e_f)) ,sigma_y, s_tr_eq, alpha_0, alpha_1);
                     panic!("Plasticity iteration did not converge");
                 }
             }
-            assert!(lambda_1 > 0.0, "lambda_1: {} not greater than zero", lambda_1);
-            alpha = 1. - (3. * self.mu * del_lambda) / s_tr_eq;
+            assert!(alpha_1 > 0.0, "lambda_1: {} not greater than zero", alpha_1);
+            theta = 1. - (3. * self.mu * del_alpha) / s_tr_eq;
         } else {
-            alpha = 1.0;
+            theta = 1.0;
         }
+        let n = s_tr/s_tr_eq;
+        let del_gamma = f64::sqrt(3. / 2.) * del_alpha;
+        let del_eps_pl = del_gamma * &n;
 
-        let s_1 = alpha * s_tr;
+        let s_1 = theta * s_tr;
+        let sigma_11 = 1.5 * s_1;
         let p_1 = 0.5*(s_1.y+s_1.z); //s_1.y and s_1.z are equal
-        let sigma_1 = s_1 - MANDEL_IDENTITY * p_1;
+        let mut sigma_1 = s_1;
         output.set_vector(Q::MandelStress, ip, sigma_1);
-        output.set_scalar(Q::EqPlasticStrain, ip, lambda_1);
-        output.set_scalar(Q::Damage, ip, 1. - f64::exp(-lambda_1 / self.e_f));
+        output.set_scalar(Q::EqPlasticStrain, ip, alpha_1);
+        output.set_scalar(Q::Damage, ip, 1. - f64::exp(-alpha_1 / self.e_f));
 
-        let elastic_rate = -(1. - alpha) / (2. * self.mu * del_t) * s_0 + alpha * d_eps_dev;
+        let elastic_rate = -(1. - theta) / (2. * self.mu * del_t) * s_0 + theta * d_eps_dev;
 
         let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
