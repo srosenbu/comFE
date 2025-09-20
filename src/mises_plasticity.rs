@@ -1,3 +1,5 @@
+use nalgebra::SVector;
+
 use crate::interfaces::{ConstitutiveModel, QDim, QValueInput, QValueOutput, Q};
 use crate::stress_strain::{
     mandel_decomposition, mandel_rate_from_velocity_gradient, MANDEL_IDENTITY,
@@ -309,18 +311,10 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
             );
         let mut d_eps = mandel_rate_from_velocity_gradient(&velocity_gradient);
         let youngs_modulus = 9. * self.mu * self.kappa / (self.mu + 3.*self.kappa);
-        //let poisson_ratio = youngs_modulus / (2. * self.mu) - 1.0;
-        //d_eps.y = - poisson_ratio * d_eps.x;
-        //d_eps.z = - poisson_ratio * d_eps.x;
-
-        //let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
-        //d_eps_vol *= -1.0;
-        
+        let nu = (3.0*self.kappa - 2.0*self.mu)/(2.0 * (3.0*self.kappa + self.mu));
         let sigma_0 = input.get_vector::<{ Q::MandelStress.size() }>(Q::MandelStress, ip);
         let alpha_0 = input.get_scalar(Q::EqPlasticStrain, ip);
 
-        //let (p_0, s_0) = mandel_decomposition(&sigma_0);
-        //let p_1 = p_0 - self.kappa * d_eps_vol * del_t;
         let sigma_tr = youngs_modulus * &d_eps * del_t + &sigma_0;
         let (p_tr, s_tr) = mandel_decomposition(&sigma_tr);
         let s_tr_eq = (1.5 * s_tr.norm_squared()).sqrt();
@@ -361,17 +355,21 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
         }
         let n = s_tr/s_tr_eq;
         let del_gamma = f64::sqrt(3. / 2.) * del_alpha;
-        let del_eps_pl = del_gamma * &n;
-
+        let d_eps_pl = (del_gamma/del_t) * &n;
+        let d_eps_22 = d_eps_pl.x * nu + d_eps_pl.y - d_eps.x * nu;
+        d_eps.y = d_eps_22;
+        d_eps.z = d_eps_22;
+        
         let s_1 = theta * s_tr;
-        let sigma_11 = 1.5 * s_1;
-        let p_1 = 0.5*(s_1.y+s_1.z); //s_1.y and s_1.z are equal
-        let mut sigma_1 = s_1;
+        let sigma_11 = 1.5 * s_1.x;
+        let sigma_1 = SVector::<f64,6>::new(sigma_11,0.0,0.0,0.0,0.0,0.0);
         output.set_vector(Q::MandelStress, ip, sigma_1);
         output.set_scalar(Q::EqPlasticStrain, ip, alpha_1);
         output.set_scalar(Q::Damage, ip, 1. - f64::exp(-alpha_1 / self.e_f));
 
-        let elastic_rate = -(1. - theta) / (2. * self.mu * del_t) * s_0 + theta * d_eps_dev;
+        let d_eps_el = d_eps - d_eps_pl;
+        let (mut d_eps_vol, d_eps_dev) = mandel_decomposition(&d_eps);
+        d_eps_vol *= -1.0;
 
         let f1 = del_t / 2. * 3. * d_eps_vol;
         let density_0 = input.get_scalar(Q::Density, ip);
@@ -379,19 +377,16 @@ impl ConstitutiveModel for UniaxialStressMisesPlasticityExponentialSoftening3D {
         output.set_scalar(Q::Density, ip, density_1);
         let density_mid = 0.5 * (density_0 + density_1);
         if output.is_some(Q::InternalPlasticEnergy) && input.is_some(Q::InternalPlasticEnergy) {
-            let s_mid = 0.5 * (s_0 + s_1);
-            let deviatoric_rate = d_eps_dev - elastic_rate;
+            let sigma_mid = 0.5 * (&sigma_0 + &sigma_1);
             let e_0 = input.get_scalar(Q::InternalPlasticEnergy, ip);
-            let e_1 = e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate));
+            let e_1 = e_0 + del_t / density_mid * (sigma_mid.dot(&d_eps_pl));
             output.set_scalar(Q::InternalPlasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalElasticEnergy) && input.is_some(Q::InternalElasticEnergy) {
-            let s_mid = 0.5 * (s_0 + s_1);
-            let p_mid = -0.5 * (p_0 + p_1);
-            let deviatoric_rate = elastic_rate;
+            let sigma_mid = 0.5 * (&sigma_0 + &sigma_1);
             let e_0 = input.get_scalar(Q::InternalElasticEnergy, ip);
             let e_1 =
-                e_0 + del_t / density_mid * (s_mid.dot(&deviatoric_rate) + 3. * d_eps_vol * p_mid);
+                e_0 + del_t / density_mid * sigma_mid.dot(&d_eps_el);
             output.set_scalar(Q::InternalElasticEnergy, ip, e_1);
         }
         if output.is_some(Q::InternalEnergy) && input.is_some(Q::InternalEnergy) {
