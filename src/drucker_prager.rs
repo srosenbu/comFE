@@ -167,12 +167,12 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             }
         };
 
-        let b = (1.0 - self.state.damage) * self.b_y + self.state.damage * self.b_r;
-        let a = (1.0 - self.state.damage) * self.a_y + self.state.damage * self.a_r;
-        let d = (1.0 - self.state.damage) * self.d_y + self.state.damage * self.d_r;
-        let db_dkappa = 0.0;
-        let da_dkappa = 0.0;
-        let dd_dkappa = 0.0;
+        let b = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.b_y + self.state.damage * self.b_r;
+        let a = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.a_y + self.state.damage * self.a_r;
+        let d = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.d_y + self.state.damage * self.d_r;
+        let db_dkappa = self.h * (1.0 - self.state.damage) * self.b_y;
+        let da_dkappa = self.h * (1.0 - self.state.damage) * self.a_y;
+        let dd_dkappa = self.h * (1.0 - self.state.damage) * self.d_y;
 
         self.state.f = self.state.i_1 + a * (self.state.j_2 + b.powi(2)).sqrt() / b - d;
         assert!(!self.state.f.is_nan(), "f is NaN");
