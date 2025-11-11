@@ -70,6 +70,8 @@ pub struct DruckerPrager3D {
     pub d_r: f64,
     pub e_f: f64,
     pub h: f64,
+    pub h_a: f64,
+    pub h_d: f64,
     pub alpha_0: f64,
     pub radial_factor: f64, //for one: pure radial return
     D: SMatrix<f64, 6, 6>,
@@ -132,6 +134,8 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             d_r: *parameters.get("d_r")?,
             e_f: *parameters.get("e_f")?,
             h: *parameters.get("h")?,
+            h_a: *parameters.get("h_a").unwrap_or(parameters.get("h")?),
+            h_d: *parameters.get("h_d").unwrap_or(parameters.get("h")?),
             alpha_0: *parameters.get("alpha_0")?,
             radial_factor: *parameters.get("radial_factor")?,
             D: D,
@@ -168,11 +172,11 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         };
 
         let b = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.b_y + self.state.damage * self.b_r;
-        let a = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.a_y + self.state.damage * self.a_r;
-        let d = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.d_y + self.state.damage * self.d_r;
+        let a = (1.0 + self.h_a * self.state.history) * (1.0 - self.state.damage) * self.a_y + self.state.damage * self.a_r;
+        let d = (1.0 + self.h_d * self.state.history) * (1.0 - self.state.damage) * self.d_y + self.state.damage * self.d_r;
         let db_dkappa = self.h * (1.0 - self.state.damage) * self.b_y;
-        let da_dkappa = self.h * (1.0 - self.state.damage) * self.a_y;
-        let dd_dkappa = self.h * (1.0 - self.state.damage) * self.d_y;
+        let da_dkappa = self.h_a * (1.0 - self.state.damage) * self.a_y;
+        let dd_dkappa = self.h_d * (1.0 - self.state.damage) * self.d_y;
 
         self.state.f = self.state.i_1 + a * (self.state.j_2 + b.powi(2)).sqrt() / b - d;
         assert!(!self.state.f.is_nan(), "f is NaN");
