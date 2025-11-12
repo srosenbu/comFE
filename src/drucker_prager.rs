@@ -171,9 +171,12 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             }
         };
 
-        let b = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.b_y + self.state.damage * self.b_r;
-        let a = (1.0 + self.h_a * self.state.history) * (1.0 - self.state.damage) * self.a_y + self.state.damage * self.a_r;
-        let d = (1.0 + self.h_d * self.state.history) * (1.0 - self.state.damage) * self.d_y + self.state.damage * self.d_r;
+        let b = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.b_y
+            + self.state.damage * self.b_r;
+        let a = (1.0 + self.h_a * self.state.history) * (1.0 - self.state.damage) * self.a_y
+            + self.state.damage * self.a_r;
+        let d = (1.0 + self.h_d * self.state.history) * (1.0 - self.state.damage) * self.d_y
+            + self.state.damage * self.d_r;
         let db_dkappa = self.h * (1.0 - self.state.damage) * self.b_y;
         let da_dkappa = self.h_a * (1.0 - self.state.damage) * self.a_y;
         let dd_dkappa = self.h_d * (1.0 - self.state.damage) * self.d_y;
@@ -194,19 +197,18 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             - dd_dkappa
             + a * db_dkappa / (self.state.j_2 + b.powi(2)).sqrt();
 
-        self.state.df_dsigma = MANDEL_IDENTITY + df_dj_2 * s;
-        self.state.m = (1.0 - self.radial_factor) * MANDEL_IDENTITY + df_dj_2 * s;
-
+        self.state.df_dsigma = &MANDEL_IDENTITY + df_dj_2 * &s;
+        self.state.m = (1.0 - self.radial_factor) * &MANDEL_IDENTITY + df_dj_2 * &s;
         let df_di_1i_1 = 0.0;
         let df_dj_2j_2 =
             -1_f64 / 4.0 * self.a_y / ((self.state.j_2 + b.powi(2)).powf(3_f64 / 2.0) * b);
-        self.state.dm_dsigma = s * df_dj_2j_2 * s.transpose() + df_dj_2 * PROJECTION_DEV_6;
+        self.state.dm_dsigma = &s * df_dj_2j_2 * &s.transpose() + df_dj_2 * &PROJECTION_DEV_6;
         let df_dj_2kappa = -1.0 / 2.0 * a * db_dkappa
             / ((self.state.j_2 + b.powi(2)).sqrt() * b.powi(2))
             + (1.0 / 2.0) * da_dkappa / ((self.state.j_2 + b.powi(2)).sqrt() * b)
             - 1.0 / 2.0 * a * db_dkappa / (self.state.j_2 + b.powi(2)).powf(3.0 / 2.0);
-
         self.state.dm_dkappa = df_dj_2kappa * s;
+
         let pl_norm = self.state.del_plastic_strain.norm();
         self.state.k = f64::sqrt(2. / 3.) * pl_norm;
         self.state.dk_dsigma = {
@@ -618,15 +620,15 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                     res_f,
                 ]);
                 if res_sigma.norm() < atol && res_kappa.abs() < atol && res_f.abs() < atol {
-                   break;
+                    break;
                 }
                 if (sigma_1 - sigma_prev).norm() < atol + rtol * sigma_1.norm()
                     && (alpha_1 - alpha_prev).abs() < atol + rtol * alpha_1.abs()
                     && (del_lambda - del_lambda_prev).abs() < atol + rtol * del_lambda.abs()
                 {
-                   break;
+                    break;
                 }
-                if i > maxit { 
+                if i > maxit {
                     panic!("Plasticity3D: Newton-Raphson did not converge. residual: {}, solution change: {}", res.norm(), (sol_1 - sol_0).norm() / sol_1.norm());
                 }
                 i += 1;
