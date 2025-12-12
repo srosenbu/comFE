@@ -49,7 +49,7 @@ def dict_to_base_units(dic):
     return new_dic
 
 
-def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
+def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
     mesh = df.mesh.create_unit_cube(
         MPI.COMM_SELF,
         1,
@@ -81,9 +81,9 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
     P1s = df.fem.FunctionSpace(mesh, ("Lagrange", 1))
     eps_nl = df.fem.Function(P1s)
     u = df.fem.Function(P1)
-    t_end = 0.1
+    t_end = 0.01
     t_pre = t_end / 100.0
-    u_end = 0.001
+    u_end = 0.01 * direction
     v_end = u_end / t_end
 
     def v(t):
@@ -155,7 +155,7 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
     omega_max_sq = np.max(np.real(eigenvalues))
 
     h = 2.0 / np.sqrt(omega_max_sq) * 1e-2
-    h = min(h, t_end / 10000.0)
+    h = min(h, t_end / 1000.0)
     c = (4.0 / h) * ((omega_max_sq * omega_min_sq) ** 0.5) / (omega_max_sq + omega_min_sq)
     c = None
 
@@ -173,6 +173,7 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
         "equivalent_nonlocal_plastic_strain",
         "equivalent_nonlocal_plastic_strain_rate",
         rule,
+        additional_output=["internal_energy_rate","stability_determinant"],
         nonlocal_initial_config=False,
         damping=c,
     )
@@ -191,6 +192,7 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
     u_max = []
     damage = []
     eps_pl = []
+    energy_rate = []
 
     while solver.t < t_end:
         v_bc.value = v(solver.t)
@@ -198,6 +200,10 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
             solver.step(h)
         except:
             break
+        try:
+            energy_rate.append(solver.q_fields["stability_determinant"].vector.array.copy())
+        except:
+            pass
         u_ = max(abs(solver.fields["u"].vector.array))
         u_max.append(u_)
         stress.append(solver.q_fields["mandel_stress"].vector.array.copy())
@@ -223,6 +229,9 @@ def test_uniaxial_strain_3D(model, parameters, file=None) -> None:
     ##print(stress[::100])
     # print(sig_1[::100])
     # print(t[::100])
+    plt.scatter(eps_1, energy_rate)
+    #plt.yscale("log")
+    plt.show()
     plt.plot(eps_1, s_eq, label="Equivalent Stress")
     plt.xlabel("Strain [-]")
     plt.ylabel("Equivalent Stress [MPa]")
@@ -317,7 +326,7 @@ def test_uniaxial_strain_two_elements_3D(model, parameters, epsilon) -> None:
     u = df.fem.Function(P1)
     t_end = 0.1
     t_pre = t_end / 100.0
-    u_end = 0.001
+    u_end = 0.01
     v_end = u_end / t_end
 
     def v(t):
@@ -488,31 +497,34 @@ def test_uniaxial_strain_two_elements_3D(model, parameters, epsilon) -> None:
 
 
 if __name__ == "__main__":
-    # parameters_jh2 = {
-    #     "RHO": [2.440e-6, "kg / mm**3"],
-    #     "rho": [2.440e-6, "kg / mm**3"],
-    #     "SHEAR_MODULUS": [12000, "MPa"],
-    #     "A": [0.6304, ""],
-    #     "B": [0.2101, ""],
-    #     "C": [0.0, ""],
-    #     "M": [0.8437, ""],
-    #     "N": [0.8437, ""],
-    #     "EPS0": [1.0, "1 / s"],
-    #     "T": [3.4, "MPa"],
-    #     "SIGMAHEL": [1005, "MPa"],
-    #     "PHEL": [0.811, "GPa"],
-    #     "D1": [0.04, ""],  # from JH concrete model
-    #     "D2": [1.0, ""],  # from JH concrete model
-    #     "K1": [16.667, "GPa"],
-    #     "K2": [73.19, "GPa"],
-    #     "K3": [-236.2, "GPa"],
-    #     "BETA": [0.0, ""],
-    #     "EFMIN": [0.01, ""],  # from JH concrete model
-    #     "DMAX": [1.0, ""],
-    #     "E_F": [0.002, ""],
-    #     "E_0": [0.0025, ""],
-    # }
-    # test_uniaxial_strain_3D(co.laws.PyGradientJH23D, parameters_jh2)
+    parameters_jh2 = {
+        "RHO": [2.440e-6, "kg / mm**3"],
+        "rho": [2.440e-6, "kg / mm**3"],
+        "SHEAR_MODULUS": [12000, "MPa"],
+        "A": [0.6304, ""],
+        "B": [0.2101, ""],
+        "C": [0.0, ""],
+        "M": [0.8437, ""],
+        "N": [0.8437, ""],
+        "EPS0": [1.0, "1 / s"],
+        "T": [3.4, "MPa"],
+        "SIGMAHEL": [1005, "MPa"],
+        "PHEL": [0.811, "GPa"],
+        "D1": [0.04, ""],  # from JH concrete model
+        "D2": [1.0, ""],  # from JH concrete model
+        "K1": [16.667, "GPa"],
+        "K2": [73.19, "GPa"],
+        "K3": [-236.2, "GPa"],
+        "BETA": [0.0, ""],
+        "EFMIN": [0.01, ""],  # from JH concrete model
+        "DMAX": [1.0, ""],
+        "E_F": [0.002, ""],
+        "E_0": [0.0025, ""],
+        "mu": [12000.0, "MPa"],
+        "bulk_modulus": [16.667, "GPa"],
+        "kappa": [16.667, "GPa"],
+    }
+    #test_uniaxial_strain_3D(co.laws.PyGradientJH23D, parameters_jh2)
     # parameters_rub = {
     #     "density": [2.440e-6, "kg / mm**3"],
     #     "rho": [2.440e-6, "kg / mm**3"],
@@ -556,21 +568,26 @@ if __name__ == "__main__":
         "a_r": [5100000.0, "Pa"],
         "b_r": [424932.58248730964, "Pa"],
         "d_r": [5100000.0, "Pa"],
-        "e_f": [0.0002, ""],
-        "h": [00.0, ""],
-        "alpha_0": [1.0002, ""],
+        "e_f": [0.002, ""],
+        "h": [100.0, ""],
+        "h_a": [0.0,""],
+        "h_d": [0.0,""],
+        "alpha_0": [0.0025, ""],
         "density": [2.440e-6, "kg / mm**3"],
         "rho": [2.440e-6, "kg / mm**3"],
         "shear_modulus": [12000.0, "MPa"],
         "mu": [12000.0, "MPa"],
         "bulk_modulus": [16.667, "GPa"],
         "kappa": [16.667, "GPa"],
+        #"bulk_modulus": [12000*2/3, "MPa"],
+        #"kappa": [12000*2/3, "MPa"],
+
         "radial_factor": [0.99, ""],
     }
 
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, 0.1)
     # test_uniaxial_strain_3D(co.laws.PyDruckerPragerClassic3D, parameters_drucker_prager)
-    test_uniaxial_strain_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, "results.csv")
+    test_uniaxial_strain_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, "results.csv", direction=1)
     # parameters_linear_elasticity = {
     #     "density": [2.440e-6, "kg / mm**3"],
     #     "rho": [2.440e-6, "kg / mm**3"],

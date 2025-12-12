@@ -3,7 +3,7 @@ use crate::stress_strain::{
     mandel_decomposition, mandel_rate_from_velocity_gradient, I_6, MANDEL_IDENTITY,
     PROJECTION_DEV_6,
 };
-use nalgebra::{RowSVector, SMatrix, SMatrixView, SVector};
+use nalgebra::{ComplexField, RowSVector, SMatrix, SMatrixView, SVector};
 use strum_macros::Display;
 
 use core::{f64, panic};
@@ -11,6 +11,18 @@ use std::collections::HashMap;
 use std::convert::identity;
 use std::error::Error;
 use std::fmt::Debug;
+
+fn projection_matrix(n: SVector<f64, 3>) -> SMatrix<f64, 6, 3> {
+    let (n1, n2, n3) = (n[0], n[1], n[2]);
+    SMatrix::<f64, 6, 3>::from_row_slice(&[
+        n1, 0.0, 0.0,
+        0.0, n2, 0.0,
+        0.0, 0.0, n3,
+        0.0, n3 * std::f64::consts::SQRT_2, n2 * std::f64::consts::SQRT_2,
+        n3 * std::f64::consts::SQRT_2, 0.0, n1 * std::f64::consts::SQRT_2,
+        n2 * std::f64::consts::SQRT_2, n1 * std::f64::consts::SQRT_2, 0.0,
+    ])
+}
 
 pub trait IsotropicHardeningPlasticity3D {
     fn new(parameters: &HashMap<String, f64>) -> Option<Self>
@@ -74,6 +86,7 @@ pub struct DruckerPrager3D {
     pub h_d: f64,
     pub alpha_0: f64,
     pub radial_factor: f64, //for one: pure radial return
+    pub tensile_cutoff: f64, //for one: tensile cutoff
     D: SMatrix<f64, 6, 6>,
     D_inv: SMatrix<f64, 6, 6>,
     state: DruckerPragerState,
@@ -138,6 +151,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             h_d: *parameters.get("h_d").unwrap_or(parameters.get("h")?),
             alpha_0: *parameters.get("alpha_0")?,
             radial_factor: *parameters.get("radial_factor")?,
+            tensile_cutoff: *parameters.get("tensile_cutoff").unwrap_or(&0.0),
             D: D,
             D_inv: D_inv,
             state: DruckerPragerState::default(),
@@ -152,6 +166,14 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         nonlocal_strain: f64,
         damage_0: f64,
     ) {
+        self.state.damage = {
+            let damage_1 = 1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f);
+            if damage_1 > damage_0 {
+                damage_1
+            } else {
+                damage_0
+            }
+        };
         let (p, s) = mandel_decomposition(sigma_1);
         let i_1 = -3.0 * p;
         let j_2 = 0.5 * s.norm_squared();
@@ -161,15 +183,6 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         self.state.history = kappa;
         self.state.nonlocal_strain = nonlocal_strain;
         self.state.del_plastic_strain = del_eps - self.D_inv * (sigma_1 - sigma_0);
-        //println!("del_pl: {}", self.state.del_plastic_strain);
-        self.state.damage = {
-            let damage_1 = 1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f);
-            if damage_1 > damage_0 {
-                damage_1
-            } else {
-                damage_0
-            }
-        };
 
         let b = (1.0 + self.h * self.state.history) * (1.0 - self.state.damage) * self.b_y
             + self.state.damage * self.b_r;
@@ -501,6 +514,13 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             //println!(self.model.del_plastic_strain().norm())
             alpha_1 = alpha_0;
             damage_1 = self.model.damage();
+            if output.is_some(Q::StabilityDeterminant) {
+                let tangent = self.model.elastic_tangent();
+                let P = projection_matrix(SVector::<f64,3>::new(1.0,0.0,0.0));
+                let det = (P.transpose()*&tangent*&P).complex_eigenvalues();
+                let out = det.map(|c| c.real()).min();
+                output.set_scalar(Q::StabilityDeterminant, ip, out);
+            }
         } else {
             let mut del_lambda = 0.0;
             let mut sol_0 = SVector::<f64, 8>::from_element(0.0); //make first test fail
@@ -636,6 +656,42 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             damage_1 = self.model.damage();
             //println!("del_alpha = {}", alpha_1 - alpha_0);
             //println!("final f: {}", self.model.f());
+            if output.is_some(Q::StabilityDeterminant) {
+                dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
+                    &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
+                );
+                //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+                dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
+                    &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
+                );
+                //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+                dres.fixed_view_mut::<6, 1>(0, 7)
+                    .copy_from(&(-self.model.elastic_tangent() * self.model.m()));
+
+                //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+                dres.fixed_view_mut::<1, 6>(6, 0)
+                    .copy_from_slice((-self.model.dk_dsigma()).as_slice());
+                //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+                dres.fixed_view_mut::<1, 1>(6, 6)
+                    .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
+                //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+                dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
+
+                //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+                dres.fixed_view_mut::<1, 6>(7, 0)
+                    .copy_from(&self.model.df_dsigma().transpose());
+                //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+                dres.fixed_view_mut::<1, 1>(7, 6)
+                    .copy_from_slice(&[self.model.df_dkappa()]);
+                //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+                dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
+                let inv = dres.try_inverse().expect("Tangent evaluation failed");
+                let tangent = - &inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent();
+                let P = projection_matrix(SVector::<f64,3>::new(1.0,0.0,0.0));
+                let det = (P.transpose()*&tangent*&P).complex_eigenvalues();
+                let out = det.map(|c| c.real()).min();
+                output.set_scalar(Q::StabilityDeterminant, ip, out);
+            }
         }
         output.set_scalar(Q::EqPlasticStrain, ip, alpha_1);
         output.set_scalar(Q::Damage, ip, damage_1);
@@ -702,6 +758,12 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             let e_1 = e_0 + del_t / density_mid * sigma_mid.dot(&d_eps);
             output.set_scalar(Q::InternalEnergy, ip, e_1);
         }
+        if output.is_some(Q::InternalEnergyRate) {
+            //let e_0 = input.get_scalar(Q::InternalEnergyRate, ip);
+            let sigma_rate_mid = (sigma_1 - sigma_0) / del_t;
+            let energy_rate = sigma_rate_mid.dot(&d_eps);
+            output.set_scalar(Q::InternalEnergyRate, ip, energy_rate);
+        }
         if output.is_some(Q::InternalHeatingEnergy) && input.is_some(Q::InternalHeatingEnergy) {
             let e_0 = input.get_scalar(Q::InternalHeatingEnergy, ip);
             let q_mid = -0.5 * (q_1 + input.get_scalar(Q::BulkViscosity, ip));
@@ -745,7 +807,11 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
     /// model. These quantities are not needed for the calculation of the stresses
     /// but can be useful for postprocessing.
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
-        HashMap::from([(Q::MandelStrainRate, QDim::Vector(6))])
+        HashMap::from([
+            (Q::MandelStrainRate, QDim::Vector(6)),
+            (Q::InternalEnergyRate, QDim::Scalar),
+            (Q::StabilityDeterminant, QDim::Scalar),
+        ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
         HashMap::from([
