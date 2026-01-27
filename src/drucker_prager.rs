@@ -14,13 +14,14 @@ use std::fmt::Debug;
 
 fn projection_matrix(n: SVector<f64, 3>) -> SMatrix<f64, 6, 3> {
     let (n1, n2, n3) = (n[0], n[1], n[2]);
+    let factor = 1.0/std::f64::consts::SQRT_2;
     SMatrix::<f64, 6, 3>::from_row_slice(&[
         n1, 0.0, 0.0,
         0.0, n2, 0.0,
         0.0, 0.0, n3,
-        0.0, n3 * std::f64::consts::SQRT_2, n2 * std::f64::consts::SQRT_2,
-        n3 * std::f64::consts::SQRT_2, 0.0, n1 * std::f64::consts::SQRT_2,
-        n2 * std::f64::consts::SQRT_2, n1 * std::f64::consts::SQRT_2, 0.0,
+        0.0, n3 * factor, n2 * factor,
+        n3 * factor, 0.0, n1 * factor,
+        n2 * factor, n1 * factor, 0.0,
     ])
 }
 
@@ -51,6 +52,45 @@ pub trait IsotropicHardeningPlasticity3D {
     fn elastic_tangent(&self) -> SMatrixView<f64, 6, 6>;
     fn elastic_tangent_inv(&self) -> SMatrixView<f64, 6, 6>;
     fn del_plastic_strain(&self) -> SVector<f64, 6>;
+    fn update_newton_matrix<const N: usize>(&self, dres: &mut SMatrix<f64, N, N>, del_lambda: f64) {
+        const STRESS_STRAIN: usize = 6;
+        const KAPPA: usize = 1;
+        assert!(N == STRESS_STRAIN + KAPPA + 1);
+        // fill dres_sigma_dsigma
+        dres.fixed_view_mut::<STRESS_STRAIN, STRESS_STRAIN>(0, 0)
+            .copy_from(
+                &(SMatrix::<f64, STRESS_STRAIN, STRESS_STRAIN>::identity()
+                    + self.elastic_tangent() * del_lambda * self.dm_dsigma()),
+            );
+        //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+        dres.fixed_view_mut::<STRESS_STRAIN, 1>(0, STRESS_STRAIN)
+            .copy_from(&(self.elastic_tangent() * self.m()));
+        //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+        dres.fixed_view_mut::<STRESS_STRAIN, KAPPA>(0, STRESS_STRAIN+1)
+            .copy_from(&(self.elastic_tangent() * del_lambda * self.dm_dkappa()));
+
+        //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+        dres.fixed_view_mut::<1, STRESS_STRAIN>(STRESS_STRAIN, 0)
+            .copy_from(&self.df_dsigma().transpose());
+        //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+        dres[(STRESS_STRAIN,STRESS_STRAIN)] = 0.0;
+        //.fixed_view_mut::<1, 1>(STRESS_STRAIN, STRESS_STRAIN)
+        //    .copy_from_slice(&[0.0]);
+        //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+        dres[(STRESS_STRAIN,STRESS_STRAIN+1)]=self.df_dkappa();
+        //dres.fixed_view_mut::<1, KAPPA>(STRESS_STRAIN, STRESS_STRAIN+1)
+        //    .copy_from(&SVector::<f64,1>::from_element(self.df_dkappa()));
+
+
+        //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+        dres.fixed_view_mut::<KAPPA, STRESS_STRAIN>(STRESS_STRAIN+1, 0)
+            .copy_from(&((-del_lambda)*self.dk_dsigma().transpose()));
+        //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+        dres[(STRESS_STRAIN+1,STRESS_STRAIN)]=-self.k();
+        //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+        dres[(STRESS_STRAIN+1,STRESS_STRAIN+1)]=1.0-del_lambda*self.dk_dkappa();
+
+    }
 }
 
 #[derive(Debug, Default)]
@@ -223,15 +263,21 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         self.state.dm_dkappa = df_dj_2kappa * s;
 
         let pl_norm = self.state.del_plastic_strain.norm();
-        self.state.k = f64::sqrt(2. / 3.) * pl_norm;
-        self.state.dk_dsigma = {
-            if pl_norm == 0.0 {
-                SVector::<f64, 6>::zeros()
-            } else {
-                -f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
-            }
-        };
-        self.state.dk_dkappa = 0.0;
+
+
+        let m_norm = self.state.m.norm();
+        self.state.k = (2_f64/3_f64).sqrt()*m_norm;
+        self.state.dk_dsigma = (((2_f64/3_f64).sqrt()/m_norm)* self.state.m.transpose() * &self.state.dm_dsigma).transpose();
+        self.state.dk_dkappa = (((2_f64/3_f64).sqrt()/m_norm)* self.state.m.transpose() * &self.state.dm_dkappa)[(0,0)];
+        //self.state.k = f64::sqrt(2. / 3.) * pl_norm;
+        // self.state.dk_dsigma = {
+        //     if pl_norm == 0.0 {
+        //         SVector::<f64, 6>::zeros()
+        //     } else {
+        //         -f64::sqrt(2. / 3.) * self.D_inv * self.state.del_plastic_strain / pl_norm
+        //     }
+        // };
+        // self.state.dk_dkappa = 0.0;
     }
 
     fn damage(&self) -> f64 {
@@ -515,10 +561,10 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             alpha_1 = alpha_0;
             damage_1 = self.model.damage();
             if output.is_some(Q::StabilityDeterminant) {
-                let tangent = self.model.elastic_tangent();
+                let tangent = self.model.elastic_tangent().symmetric_part();
                 let P = projection_matrix(SVector::<f64,3>::new(1.0,0.0,0.0));
-                let det = (P.transpose()*&tangent*&P).complex_eigenvalues();
-                let out = det.map(|c| c.real()).min();
+                let eig = (P.transpose()*&tangent*&P).symmetric_eigenvalues();
+                let out = eig.min();//det.map(|c| c.real()).min();
                 output.set_scalar(Q::StabilityDeterminant, ip, out);
             }
         } else {
@@ -531,12 +577,13 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 sigma_tr[3],
                 sigma_tr[4],
                 sigma_tr[5],
-                alpha_0,
                 0.0,
+                alpha_0,
             ]);
-            let mut res_sigma =
-                sigma_tr - sigma_0 - del_lambda * self.model.elastic_tangent() * self.model.m();
-            let mut res_kappa = alpha_1 - alpha_0 - self.model.k();
+            //TODO: set res_sigma, res_kappa to zero
+            let mut res_sigma = SVector::<f64,6>::zeros();
+                //sigma_tr - sigma_tr - del_lambda * self.model.elastic_tangent() * self.model.m();
+            let mut res_kappa = 0.0;//alpha_1 - alpha_0 - self.model.k();
             let mut res_f = self.model.f();
 
             let mut dres = SMatrix::<f64, 8, 8>::zeros();
@@ -548,8 +595,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 res_sigma[3],
                 res_sigma[4],
                 res_sigma[5],
-                res_kappa,
                 res_f,
+                res_kappa
             ]);
             let mut i = 0;
             let maxit = 25;
@@ -565,34 +612,35 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 sol_0 = sol_1;
 
                 // fill dres_sigma_dsigma
-                dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
-                    &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
-                );
-                //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
-                dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
-                    &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
-                );
-                //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
-                dres.fixed_view_mut::<6, 1>(0, 7)
-                    .copy_from(&(-self.model.elastic_tangent() * self.model.m()));
+                self.model.update_newton_matrix(&mut dres, del_lambda);
+                // dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
+                //     &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
+                // );
+                // //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+                // dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
+                //     &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
+                // );
+                // //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+                // dres.fixed_view_mut::<6, 1>(0, 7)
+                //     .copy_from(&(-self.model.elastic_tangent() * self.model.m()));
 
-                //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
-                dres.fixed_view_mut::<1, 6>(6, 0)
-                    .copy_from_slice((-self.model.dk_dsigma()).as_slice());
-                //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
-                dres.fixed_view_mut::<1, 1>(6, 6)
-                    .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
-                //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
-                dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
+                // //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+                // dres.fixed_view_mut::<1, 6>(6, 0)
+                //     .copy_from_slice((-self.model.dk_dsigma()).as_slice());
+                // //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+                // dres.fixed_view_mut::<1, 1>(6, 6)
+                //     .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
+                // //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+                // dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
 
-                //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
-                dres.fixed_view_mut::<1, 6>(7, 0)
-                    .copy_from(&self.model.df_dsigma().transpose());
-                //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
-                dres.fixed_view_mut::<1, 1>(7, 6)
-                    .copy_from_slice(&[self.model.df_dkappa()]);
-                //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
-                dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
+                // //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+                // dres.fixed_view_mut::<1, 6>(7, 0)
+                //     .copy_from(&self.model.df_dsigma().transpose());
+                // //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+                // dres.fixed_view_mut::<1, 1>(7, 6)
+                //     .copy_from_slice(&[self.model.df_dkappa()]);
+                // //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+                // dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
 
                 let lu = dres.lu();
                 let result = lu.solve(&res);
@@ -609,12 +657,12 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
 
                 // extract solution and calcualte new residual
                 sigma_1 = sol_1.fixed_view::<6, 1>(0, 0).into();
-                alpha_1 = sol_1[6];
-                del_lambda = sol_1[7];
+                alpha_1 = sol_1[7];
+                del_lambda = sol_1[6];
 
                 sigma_prev = sol_0.fixed_view::<6, 1>(0, 0).into();
-                alpha_prev = sol_0[6];
-                del_lambda_prev = sol_0[7];
+                alpha_prev = sol_0[7];
+                del_lambda_prev = sol_0[6];
 
                 self.model.set_model_state(
                     &sigma_0,
@@ -626,8 +674,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 );
 
                 res_sigma =
-                    sigma_tr - sigma_1 - del_lambda * self.model.elastic_tangent() * self.model.m();
-                res_kappa = alpha_1 - alpha_0 - self.model.k();
+                    sigma_1 - sigma_tr + del_lambda * self.model.elastic_tangent() * self.model.m();
+                res_kappa = alpha_1 - alpha_0 - del_lambda * self.model.k();
                 res_f = self.model.f();
                 res = SVector::<f64, 8>::from([
                     res_sigma[0],
@@ -636,8 +684,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                     res_sigma[3],
                     res_sigma[4],
                     res_sigma[5],
-                    res_kappa,
                     res_f,
+                    res_kappa,
                 ]);
                 if res_sigma.norm() < atol && res_kappa.abs() < atol && res_f.abs() < atol {
                     break;
@@ -653,43 +701,48 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 }
                 i += 1;
             }
+            //println!("diff eps_pl {}", (self.model.del_plastic_strain()-del_lambda*self.model.m()).norm()/self.model.del_plastic_strain().norm());
+            //println!("eps_pl: {}", self.model.del_plastic_strain());
+            //println!("eps_pl real: {}", del_lambda*self.model.m());
+            assert!(del_lambda>0.0, "non-positive plastic multiplier{}", del_lambda);
             damage_1 = self.model.damage();
             //println!("del_alpha = {}", alpha_1 - alpha_0);
             //println!("final f: {}", self.model.f());
             if output.is_some(Q::StabilityDeterminant) {
-                dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
-                    &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
-                );
-                //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
-                dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
-                    &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
-                );
-                //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
-                dres.fixed_view_mut::<6, 1>(0, 7)
-                    .copy_from(&(-self.model.elastic_tangent() * self.model.m()));
+                self.model.update_newton_matrix(&mut dres, del_lambda);
+                // dres.fixed_view_mut::<6, 6>(0, 0).copy_from(
+                //     &(-I_6 - self.model.elastic_tangent() * del_lambda * self.model.dm_dsigma()),
+                // );
+                // //let mut dres_sigma_dkappa = dres.fixed_view_mut::<6, 1>(0, 6);
+                // dres.fixed_view_mut::<6, 1>(0, 6).copy_from(
+                //     &(-self.model.elastic_tangent() * del_lambda * self.model.dm_dkappa()),
+                // );
+                // //let mut dres_sigma_dlambda = dres.fixed_view_mut::<6, 1>(0, 7);
+                // dres.fixed_view_mut::<6, 1>(0, 7)
+                //     .copy_from(&(-self.model.elastic_tangent() * self.model.m()));
 
-                //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
-                dres.fixed_view_mut::<1, 6>(6, 0)
-                    .copy_from_slice((-self.model.dk_dsigma()).as_slice());
-                //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
-                dres.fixed_view_mut::<1, 1>(6, 6)
-                    .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
-                //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
-                dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
+                // //let mut dres_kappa_dsigma = dres.fixed_view_mut::<1, 6>(6, 0);
+                // dres.fixed_view_mut::<1, 6>(6, 0)
+                //     .copy_from_slice((-self.model.dk_dsigma()).as_slice());
+                // //let mut dres_kappa_dkappa = dres.fixed_view_mut::<1, 1>(6, 6);
+                // dres.fixed_view_mut::<1, 1>(6, 6)
+                //     .copy_from_slice(&[1.0 - self.model.dk_dkappa()]);
+                // //let mut dres_kappa_dlambda = dres.fixed_view_mut::<1, 1>(6, 7);
+                // dres.fixed_view_mut::<1, 1>(6, 7).copy_from_slice(&[0.0]);
 
-                //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
-                dres.fixed_view_mut::<1, 6>(7, 0)
-                    .copy_from(&self.model.df_dsigma().transpose());
-                //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
-                dres.fixed_view_mut::<1, 1>(7, 6)
-                    .copy_from_slice(&[self.model.df_dkappa()]);
-                //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
-                dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
+                // //let mut dres_f_dsigma = dres.fixed_view_mut::<1, 6>(7, 0);
+                // dres.fixed_view_mut::<1, 6>(7, 0)
+                //     .copy_from(&self.model.df_dsigma().transpose());
+                // //let mut dres_f_dkappa = dres.fixed_view_mut::<1, 1>(7, 6);
+                // dres.fixed_view_mut::<1, 1>(7, 6)
+                //     .copy_from_slice(&[self.model.df_dkappa()]);
+                // //let mut dres_f_dlambda = dres.fixed_view_mut::<1, 1>(7, 7);
+                // dres.fixed_view_mut::<1, 1>(7, 7).copy_from_slice(&[0.0]);
                 let inv = dres.try_inverse().expect("Tangent evaluation failed");
-                let tangent = - &inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent();
+                let tangent = (&inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent()).symmetric_part();
                 let P = projection_matrix(SVector::<f64,3>::new(1.0,0.0,0.0));
-                let det = (P.transpose()*&tangent*&P).complex_eigenvalues();
-                let out = det.map(|c| c.real()).min();
+                let eig = (P.transpose()*&tangent*&P).symmetric_eigenvalues();
+                let out = eig.min();//det.map(|c| c.real()).min();
                 output.set_scalar(Q::StabilityDeterminant, ip, out);
             }
         }

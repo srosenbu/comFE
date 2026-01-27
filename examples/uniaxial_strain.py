@@ -229,9 +229,15 @@ def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
     ##print(stress[::100])
     # print(sig_1[::100])
     # print(t[::100])
-    plt.scatter(eps_1, energy_rate)
+    try:
+        plt.scatter(eps_1, -np.array(energy_rate),label = "negaitve values")
+        plt.scatter(eps_1, np.array(energy_rate),  marker='+',label = "positive values")
+        plt.yscale("log")
+        plt.legend()
+        plt.show()
+    except:
+        pass
     #plt.yscale("log")
-    plt.show()
     plt.plot(eps_1, s_eq, label="Equivalent Stress")
     plt.xlabel("Strain [-]")
     plt.ylabel("Equivalent Stress [MPa]")
@@ -570,9 +576,9 @@ if __name__ == "__main__":
         "d_r": [5100000.0, "Pa"],
         "e_f": [0.002, ""],
         "h": [100.0, ""],
-        "h_a": [0.0,""],
-        "h_d": [0.0,""],
-        "alpha_0": [0.0025, ""],
+        #"h_a": [0.0,""],
+        #"h_d": [0.0,""],
+        "alpha_0": [0.001, ""],
         "density": [2.440e-6, "kg / mm**3"],
         "rho": [2.440e-6, "kg / mm**3"],
         "shear_modulus": [12000.0, "MPa"],
@@ -582,7 +588,7 @@ if __name__ == "__main__":
         #"bulk_modulus": [12000*2/3, "MPa"],
         #"kappa": [12000*2/3, "MPa"],
 
-        "radial_factor": [0.99, ""],
+        "radial_factor": [0., ""],
     }
 
     # test_uniaxial_strain_two_elements_3D(co.laws.PyDruckerPrager3D, parameters_drucker_prager, 0.1)
