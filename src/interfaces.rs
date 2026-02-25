@@ -65,8 +65,8 @@ pub enum Q {
     CellDiameter,
     #[strum(serialize = "HistoryMaximum", serialize = "history_maximum")]
     HistoryMaximum,
-    #[strum(serialize = "StabilityDeterminant", serialize = "stability_determinant")]
-    StabilityDeterminant,
+    #[strum(serialize = "StabilityEigenvalue", serialize = "stability_eigenvalue")]
+    StabilityEigenvalue,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -239,8 +239,8 @@ impl Q {
             Q::BulkViscosity => QDim::Scalar,
             Q::CellDiameter => QDim::Scalar,
             Q::HistoryMaximum => QDim::Scalar,
+            Q::StabilityEigenvalue => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
-            Q::StabilityDeterminant => QDim::Scalar,
         }
     }
     pub const fn dim(&self) -> usize {

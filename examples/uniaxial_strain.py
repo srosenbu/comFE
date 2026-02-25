@@ -154,7 +154,7 @@ def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
     omega_min_sq = np.min(np.real(eigenvalues))
     omega_max_sq = np.max(np.real(eigenvalues))
 
-    h = 2.0 / np.sqrt(omega_max_sq) * 1e-2
+    h = 2.0 / np.sqrt(omega_max_sq) * 0.5e-3
     h = min(h, t_end / 1000.0)
     c = (4.0 / h) * ((omega_max_sq * omega_min_sq) ** 0.5) / (omega_max_sq + omega_min_sq)
     c = None
@@ -173,7 +173,7 @@ def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
         "equivalent_nonlocal_plastic_strain",
         "equivalent_nonlocal_plastic_strain_rate",
         rule,
-        additional_output=["internal_energy_rate","stability_determinant"],
+        additional_output=["internal_energy_rate","stability_eigenvalue"],
         nonlocal_initial_config=False,
         damping=c,
     )
@@ -200,10 +200,9 @@ def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
             solver.step(h)
         except:
             break
-        try:
-            energy_rate.append(solver.q_fields["stability_determinant"].vector.array.copy())
-        except:
-            pass
+        
+        energy_rate.append(solver.q_fields["stability_eigenvalue"].vector.array.copy())
+        
         u_ = max(abs(solver.fields["u"].vector.array))
         u_max.append(u_)
         stress.append(solver.q_fields["mandel_stress"].vector.array.copy())
@@ -229,14 +228,15 @@ def test_uniaxial_strain_3D(model, parameters, file=None, direction=1.) -> None:
     ##print(stress[::100])
     # print(sig_1[::100])
     # print(t[::100])
-    try:
-        plt.scatter(eps_1, -np.array(energy_rate),label = "negaitve values")
-        plt.scatter(eps_1, np.array(energy_rate),  marker='+',label = "positive values")
-        plt.yscale("log")
-        plt.legend()
-        plt.show()
-    except:
-        pass
+    print(eps_1.shape,np.array(energy_rate).shape)
+    plt.scatter(eps_1, -np.array(energy_rate),label = "negaitve values")
+    plt.scatter(eps_1, np.array(energy_rate),  marker='+',label = "positive values")
+    plt.xlabel("Strain [-]")
+    plt.ylabel("Smallest eigenvalue of acoustic stability tensor")
+    plt.yscale("log")
+    plt.legend()
+    plt.show()
+    
     #plt.yscale("log")
     plt.plot(eps_1, s_eq, label="Equivalent Stress")
     plt.xlabel("Strain [-]")
@@ -575,10 +575,13 @@ if __name__ == "__main__":
         "b_r": [424932.58248730964, "Pa"],
         "d_r": [5100000.0, "Pa"],
         "e_f": [0.002, ""],
-        "h": [100.0, ""],
+        "h": [0.01, ""],
         #"h_a": [0.0,""],
         #"h_d": [0.0,""],
-        "alpha_0": [0.001, ""],
+        "n1": [1.0,""],
+        "n2": [0.0,""],
+        "n3": [0.0,""],
+        "alpha_0": [0.100, ""],
         "density": [2.440e-6, "kg / mm**3"],
         "rho": [2.440e-6, "kg / mm**3"],
         "shear_modulus": [12000.0, "MPa"],
