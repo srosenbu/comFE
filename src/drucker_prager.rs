@@ -264,7 +264,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         self.state.m = (1.0 - self.radial_factor) * &MANDEL_IDENTITY + df_dj_2 * &s;
         let df_di_1i_1 = 0.0;
         let df_dj_2j_2 =
-            -1_f64 / 4.0 * self.a_y / ((self.state.j_2 + b.powi(2)).powf(3_f64 / 2.0) * b);
+            -1_f64 / 4.0 * a / ((self.state.j_2 + b.powi(2)).powf(3_f64 / 2.0) * b);
         self.state.dm_dsigma = &s * df_dj_2j_2 * &s.transpose() + df_dj_2 * &PROJECTION_DEV_6;
         let df_dj_2kappa = -1.0 / 2.0 * a * db_dkappa
             / ((self.state.j_2 + b.powi(2)).sqrt() * b.powi(2))
