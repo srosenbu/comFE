@@ -713,7 +713,7 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                     // calculate the eigenvalue for each direction and take the minimum
                     let mut min_eig = f64::INFINITY;
                     for i in 0..10 {
-                        let n = SVector::<f64, 3>::new(n1, n2 * theta[i].cos(), n2 * theta[i].sin());
+                        let n = SVector::<f64, 3>::new(theta[i].cos(), theta[i].sin(), 0.0);
                         let P = projection_matrix(n);
                         let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
                         let out = eig.min();
