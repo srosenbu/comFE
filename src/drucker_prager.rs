@@ -136,7 +136,8 @@ pub struct DruckerPrager3D {
     pub h_d: f64,
     pub alpha_0: f64,
     pub radial_factor: f64,  //for one: pure radial return
-    pub tensile_cutoff: f64, //for one: tensile cutoff
+    pub omega_max: f64,
+    //pub tensile_cutoff: f64, //for one: tensile cutoff
     D: SMatrix<f64, 6, 6>,
     D_inv: SMatrix<f64, 6, 6>,
     state: DruckerPragerState,
@@ -201,7 +202,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
             h_d: *parameters.get("h_d").unwrap_or(parameters.get("h")?),
             alpha_0: *parameters.get("alpha_0")?,
             radial_factor: *parameters.get("radial_factor")?,
-            tensile_cutoff: *parameters.get("tensile_cutoff").unwrap_or(&0.0),
+            omega_max: *parameters.get("omega_max").unwrap_or(&1.0),
             D: D,
             D_inv: D_inv,
             state: DruckerPragerState::default(),
@@ -217,7 +218,7 @@ impl IsotropicHardeningPlasticity3D for DruckerPrager3D {
         damage_0: f64,
     ) {
         self.state.damage = {
-            let damage_1 = 1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f);
+            let damage_1 = self.omega_max*(1. - f64::exp((self.alpha_0 - nonlocal_strain) / self.e_f));
             if damage_1 > damage_0 {
                 damage_1
             } else {
