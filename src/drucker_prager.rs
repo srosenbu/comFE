@@ -702,10 +702,27 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 let inv = dres.try_inverse().expect("Tangent evaluation failed");
                 let tangent =
                     (&inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent()).symmetric_part();
-                let P = projection_matrix(SVector::<f64, 3>::new(n1, n2, n3));
-                let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
-                let out = eig.min();
-                output.set_scalar(Q::StabilityEigenvalue, ip, out);
+                if n2 == 0.0 && n3 == 0.0 {
+                    let P = projection_matrix(SVector::<f64, 3>::new(n1, n2, n3));
+                    let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
+                    let out = eig.min();
+                    output.set_scalar(Q::StabilityEigenvalue, ip, out);
+                } else if n2.abs()>0.0 && n3==0.0 {
+                    // parametrice half unit circle with the angle theta
+                    let theta:SVector<f64, 10> = SVector::<f64, 10>::from_iterator((0..10).map(|i| (i as f64) * std::f64::consts::FRAC_PI_2 / 9.0)); 
+                    // calculate the eigenvalue for each direction and take the minimum
+                    let mut min_eig = f64::INFINITY;
+                    for i in 0..10 {
+                        let n = SVector::<f64, 3>::new(n1, n2 * theta[i].cos(), n2 * theta[i].sin());
+                        let P = projection_matrix(n);
+                        let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
+                        let out = eig.min();
+                        if out < min_eig {
+                            min_eig = out;
+                        }
+                    }
+                    output.set_scalar(Q::StabilityEigenvalue, ip, min_eig);
+                }
             }
         }
         output.set_scalar(Q::EqPlasticStrain, ip, alpha_1);
