@@ -231,7 +231,7 @@ class CDM3D(CDMSolver):
             ]
         )
 
-    def stress_update(self, h):
+    def stress_update(self, h: float, exclude_outputs: list[str]):
         L = self.model.input["velocity_gradient"]
         sigma = self.model.input["mandel_stress"]
         if self.viscosity_evaluator is not None:
@@ -249,10 +249,12 @@ class CDM3D(CDMSolver):
         #    ] = self.nonlocal_var.get_quadrature_values()
 
         # TODO: Is GhostUpdate really used correcxtly
-        self.model.evaluate(h)
+        self.model.evaluate(h, exclude_outputs)
         self.model.update()
 
-    def step(self, h, intermediate_step: Callable | None = None) -> None:
+    def step(self, h, intermediate_step: Callable | None = None, exclude_outputs: list[str]|None=None) -> None:
+        exclude_outputs = [] if exclude_outputs is None else exclude_outputs
+        
         del_t_mid = (h + self.del_t) / 2.0 if self.del_t != 0.0 else h
         self.del_t = h
 
@@ -294,7 +296,7 @@ class CDM3D(CDMSolver):
         if intermediate_step is not None:
             intermediate_step(h)
 
-        self.stress_update(self.del_t)
+        self.stress_update(self.del_t, exclude_outputs)
 
         self.fields["u"].x.array[:] += 2.0 * du_half
         self.fields["u"].x.scatter_forward()
@@ -753,6 +755,6 @@ class CDMNonlocalMechanics(CDMSolver):
             t=t0,
         )
 
-    def step(self, h: float) -> None:
-        self.mechanics_solver.step(h, self.nonlocal_solver.step)
+    def step(self, h: float, exclude_outputs: list[str]|None=None) -> None:
+        self.mechanics_solver.step(h, self.nonlocal_solver.step, exclude_outputs=exclude_outputs)
         self.t = self.mechanics_solver.t

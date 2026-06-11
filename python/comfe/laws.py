@@ -100,9 +100,10 @@ class ConstitutiveModel(BaseModel):
         input, output, spaces = ceate_input_and_output(model[0], rule, mesh, None, additional_variables)
         super().__init__(rs_object=model, input=input, output=output, ips=ips, spaces=spaces)
 
-    def evaluate(self, del_t=1.0) -> None:
+    def evaluate(self, del_t=1.0, exclude_outputs: list[str] | None = None) -> None:
+        exclude_outputs = [] if exclude_outputs is None else exclude_outputs
         input = {key: value.vector.array for key, value in self.input.items()}
-        output = {key: value.vector.array for key, value in self.output.items()}
+        output = {key: value.vector.array for key, value in self.output.items() if key not in exclude_outputs}
         if len(self.rs_object) > 1:
             for model, ips in zip(self.rs_object, self.ips):
                 model.evaluate_some(del_t, input, output, ips)
