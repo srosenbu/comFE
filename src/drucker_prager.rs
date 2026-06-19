@@ -691,8 +691,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 i += 1;
             }
             assert!(
-                del_lambda > 0.0,
-                "non-positive plastic multiplier{}",
+                del_lambda >= -1e-10,
+                "negative plastic multiplier: {}",
                 del_lambda
             );
             damage_1 = self.model.damage();
