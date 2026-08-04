@@ -603,6 +603,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             let mut res_kappa = 0.0;
             let mut res_f = self.model.f();
 
+            // Natural, model-agnostic scales for the mixed-tolerance convergence
+            // check below. `sigma_tr` is the elastic predictor stress, always
+            // available regardless of which model is plugged in. `f_scale` is the
+            // yield function evaluated at that same trial state (i.e. `res_f`
+            // above) which is guaranteed to be strictly positive here (that is
+            // exactly why we are in the plastic branch), so it gives a reference
+            // magnitude in whatever units the model's own `f()` happens to use,
+            // without assuming stress units or any other model-specific scale.
+            let sigma_scale = sigma_tr.norm();
+            let f_scale = res_f.abs();
+
             let mut dres = SMatrix::<f64, 8, 8>::zeros();
 
             let mut res = SVector::<f64, 8>::from([
@@ -676,7 +687,14 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                     res_f,
                     res_kappa,
                 ]);
-                if res_sigma.norm() < atol && res_kappa.abs() < atol && res_f.abs() < atol {
+                // Hardening-variable scale, updated each iteration since alpha_1
+                // evolves; falls back to the `atol` floor when both are ~0 (e.g.
+                // right at the onset of plasticity).
+                let kappa_scale = alpha_0.abs().max(alpha_1.abs());
+                if res_sigma.norm() < atol + rtol * sigma_scale
+                    && res_kappa.abs() < atol + rtol * kappa_scale
+                    && res_f.abs() < atol + rtol * f_scale
+                {
                     break;
                 }
                 if (sigma_1 - sigma_prev).norm() < atol + rtol * sigma_1.norm()
