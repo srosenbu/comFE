@@ -67,6 +67,8 @@ pub enum Q {
     HistoryMaximum,
     #[strum(serialize = "StabilityEigenvalue", serialize = "stability_eigenvalue")]
     StabilityEigenvalue,
+    #[strum(serialize = "FlutterEigenvalue", serialize = "flutter_eigenvalue")]
+    FlutterEigenvalue,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -239,7 +241,10 @@ impl Q {
             Q::BulkViscosity => QDim::Scalar,
             Q::CellDiameter => QDim::Scalar,
             Q::HistoryMaximum => QDim::Scalar,
-            Q::StabilityEigenvalue => QDim::Scalar,
+            // (Re, Im) of a single eigenvalue of the (generally non-symmetric) acoustic
+            // tensor; see drucker_prager.rs::critical_acoustic_eigenvalues.
+            Q::StabilityEigenvalue => QDim::Vector(2),
+            Q::FlutterEigenvalue => QDim::Vector(2),
             Q::_LAST => QDim::Scalar,
         }
     }

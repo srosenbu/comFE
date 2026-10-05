@@ -3,7 +3,7 @@ use crate::stress_strain::{
     mandel_decomposition, mandel_rate_from_velocity_gradient, I_6, MANDEL_IDENTITY,
     PROJECTION_DEV_6,
 };
-use nalgebra::{ComplexField, RowSVector, SMatrix, SMatrixView, SVector};
+use nalgebra::{Complex, ComplexField, RowSVector, SMatrix, SMatrixView, SVector};
 use strum_macros::Display;
 
 use core::{f64, panic};
@@ -35,6 +35,36 @@ fn projection_matrix(n: SVector<f64, 3>) -> SMatrix<f64, 6, 3> {
         n1 * factor,
         0.0,
     ])
+}
+
+/// Scans the acoustic tensor `P(n)^T * tangent * P(n)` over the given directions `n`
+/// and returns the eigenvalue with the smallest real part and the eigenvalue with the
+/// largest imaginary part (across all directions and all 3 eigenvalues per direction).
+/// `tangent` is used as-is, not symmetrized: for non-associated flow it is generally
+/// non-symmetric, so its eigenvalues can become complex, which signals loss of
+/// hyperbolicity (flutter instability) rather than the classical loss of ellipticity
+/// captured by a negative real eigenvalue.
+fn critical_acoustic_eigenvalues(
+    tangent: &SMatrix<f64, 6, 6>,
+    directions: &[SVector<f64, 3>],
+) -> (Complex<f64>, Complex<f64>) {
+    let mut min_re = Complex::new(f64::INFINITY, 0.0);
+    let mut max_im = Complex::new(0.0, f64::NEG_INFINITY);
+    for n in directions {
+        let p = projection_matrix(*n);
+        let acoustic_tensor = p.transpose() * tangent * &p;
+        let eigenvalues = acoustic_tensor.complex_eigenvalues();
+        for k in 0..3 {
+            let eigenvalue = eigenvalues[k];
+            if eigenvalue.re < min_re.re {
+                min_re = eigenvalue;
+            }
+            if eigenvalue.im > max_im.im {
+                max_im = eigenvalue;
+            }
+        }
+    }
+    (min_re, max_im)
 }
 
 pub trait IsotropicHardeningPlasticity3D {
@@ -578,12 +608,12 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             //println!(self.model.del_plastic_strain().norm())
             alpha_1 = alpha_0;
             damage_1 = self.model.damage();
-            if output.is_some(Q::StabilityEigenvalue) {
-                let tangent = self.model.elastic_tangent().symmetric_part();
-                let P = projection_matrix(SVector::<f64, 3>::new(n1, n2, n3));
-                let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
-                let out = eig.min();
-                output.set_scalar(Q::StabilityEigenvalue, ip, out);
+            if output.is_some(Q::StabilityEigenvalue) || output.is_some(Q::FlutterEigenvalue) {
+                let tangent = self.model.elastic_tangent().into_owned();
+                let directions = [SVector::<f64, 3>::new(n1, n2, n3)];
+                let (min_re, max_im) = critical_acoustic_eigenvalues(&tangent, &directions);
+                output.set_vector(Q::StabilityEigenvalue, ip, SVector::<f64, 2>::new(min_re.re, min_re.im));
+                output.set_vector(Q::FlutterEigenvalue, ip, SVector::<f64, 2>::new(max_im.re, max_im.im));
             }
         } else {
             let mut del_lambda = 0.0;
@@ -715,32 +745,32 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             );
             damage_1 = self.model.damage();
 
-            if output.is_some(Q::StabilityEigenvalue) {
+            if output.is_some(Q::StabilityEigenvalue) || output.is_some(Q::FlutterEigenvalue) {
                 self.model.update_newton_matrix(&mut dres, del_lambda);
 
                 let inv = dres.try_inverse().expect("Tangent evaluation failed");
-                let tangent =
-                    (&inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent()).symmetric_part();
-                if n2 == 0.0 && n3 == 0.0 {
-                    let P = projection_matrix(SVector::<f64, 3>::new(n1, n2, n3));
-                    let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
-                    let out = eig.min();
-                    output.set_scalar(Q::StabilityEigenvalue, ip, out);
-                } else if n2.abs()>0.0 && n3==0.0 {
-                    // parametrice half unit circle with the angle theta
-                    let theta:SVector<f64, 10> = SVector::<f64, 10>::from_iterator((0..10).map(|i| (i as f64) * std::f64::consts::FRAC_PI_2 / 9.0)); 
-                    // calculate the eigenvalue for each direction and take the minimum
-                    let mut min_eig = f64::INFINITY;
-                    for i in 0..10 {
-                        let n = SVector::<f64, 3>::new(theta[i].cos(), theta[i].sin(), 0.0);
-                        let P = projection_matrix(n);
-                        let eig = (P.transpose() * &tangent * &P).symmetric_eigenvalues();
-                        let out = eig.min();
-                        if out < min_eig {
-                            min_eig = out;
-                        }
-                    }
-                    output.set_scalar(Q::StabilityEigenvalue, ip, min_eig);
+                let tangent = &inv.fixed_view::<6, 6>(0, 0) * self.model.elastic_tangent();
+
+                let directions: Option<Vec<SVector<f64, 3>>> = if n2 == 0.0 && n3 == 0.0 {
+                    Some(vec![SVector::<f64, 3>::new(n1, n2, n3)])
+                } else if n2.abs() > 0.0 && n3 == 0.0 {
+                    // parametrize half unit circle with the angle theta
+                    Some(
+                        (0..10)
+                            .map(|i| {
+                                let theta = (i as f64) * std::f64::consts::FRAC_PI_2 / 9.0;
+                                SVector::<f64, 3>::new(theta.cos(), theta.sin(), 0.0)
+                            })
+                            .collect(),
+                    )
+                } else {
+                    None
+                };
+
+                if let Some(directions) = directions {
+                    let (min_re, max_im) = critical_acoustic_eigenvalues(&tangent, &directions);
+                    output.set_vector(Q::StabilityEigenvalue, ip, SVector::<f64, 2>::new(min_re.re, min_re.im));
+                    output.set_vector(Q::FlutterEigenvalue, ip, SVector::<f64, 2>::new(max_im.re, max_im.im));
                 }
             }
         }
@@ -854,7 +884,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
     fn define_optional_output(&self) -> HashMap<Q, QDim> {
         HashMap::from([
             (Q::MandelStrainRate, QDim::Vector(6)),
-            (Q::StabilityEigenvalue, QDim::Scalar),
+            (Q::StabilityEigenvalue, QDim::Vector(2)),
+            (Q::FlutterEigenvalue, QDim::Vector(2)),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
