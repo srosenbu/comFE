@@ -19,7 +19,7 @@ use crate::rub::RUB3D;
 use crate::smallstrain::linear_elastic::LinearElastic3D;
 use crate::smallstrain::{elasticity_3d, evaluate_model};
 //use crate::stress_strain;
-use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix};
+use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, SMatrix, SVector};
 use numpy::{PyReadonlyArray1, PyReadwriteArray1};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -417,6 +417,42 @@ fn py_jaumann_rotation_expensive(
     stress_strain::jaumann_rotation_expensive(del_t, &velocity_gradient, &mut stress);
     Ok(())
 }
+#[pyfunction(name = "jaumann_rotation_matrix")]
+fn py_jaumann_rotation_matrix(
+    stress: PyReadonlyArray1<f64>,
+    matrix: PyReadwriteArray1<f64>,
+) -> PyResult<()> {
+    let stress = stress
+        .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    let stress = SVector::<f64, 6>::from_column_slice(stress.as_slice());
+    let b = stress_strain::jaumann_rotation_matrix(&stress);
+
+    let mut matrix = matrix
+        .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    for row in 0..6 {
+        for col in 0..3 {
+            matrix[row * 3 + col] = b[(row, col)];
+        }
+    }
+    Ok(())
+}
+#[pyfunction(name = "jaumann_rotation_matrix_based")]
+fn py_jaumann_rotation_matrix_based(
+    del_t: f64,
+    velocity_gradient: PyReadonlyArray1<f64>,
+    stress: PyReadwriteArray1<f64>,
+) -> PyResult<()> {
+    let velocity_gradient = velocity_gradient
+        .try_as_matrix::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    let mut stress = stress
+        .try_as_matrix_mut::<Dyn, Const<1>, Const<1>, Dyn>()
+        .unwrap();
+    stress_strain::jaumann_rotation_matrix_based(del_t, &velocity_gradient, &mut stress);
+    Ok(())
+}
 // #[pyfunction(name="evaluate_elasticity_3d")]
 // fn py_evaluate_elasticity_3d(
 //     del_t: f64,
@@ -464,5 +500,7 @@ fn comfe(_py: Python, m: &PyModule) -> PyResult<()> {
     );
     m.add_function(wrap_pyfunction!(py_jaumann_rotation, m)?)?;
     m.add_function(wrap_pyfunction!(py_jaumann_rotation_expensive, m)?)?;
+    m.add_function(wrap_pyfunction!(py_jaumann_rotation_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(py_jaumann_rotation_matrix_based, m)?)?;
     Ok(())
 }

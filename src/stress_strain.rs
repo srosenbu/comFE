@@ -163,6 +163,52 @@ pub fn jaumann_rotation(
     }
 }
 
+/// Builds the matrix $B(\sigma)$ such that $B(\sigma) \cdot [w_{12}, w_{13}, w_{23}]^\top$
+/// gives the Jaumann rotation increment $W\sigma - \sigma W$ in Mandel notation, where
+/// $w_{12}, w_{13}, w_{23}$ are the independent components of the spin tensor
+/// $W = 0.5\cdot(L-L^\top)$. See theory/stress_rate.ipynb for the derivation.
+pub fn jaumann_rotation_matrix(stress: &SVector<f64, 6>) -> SMatrix<f64, 6, 3> {
+    const SQRT: f64 = 1.4142135623730951; // sqrt(2)
+    SMatrix::<f64, 6, 3>::new(
+        SQRT * stress.b, SQRT * stress.a, 0.0,
+        -SQRT * stress.b, 0.0, SQRT * stress.w,
+        0.0, -SQRT * stress.a, -SQRT * stress.w,
+        -stress.a, -stress.b, SQRT * (stress.z - stress.y),
+        stress.w, SQRT * (stress.z - stress.x), -stress.b,
+        SQRT * (stress.y - stress.x), stress.w, stress.a,
+    )
+}
+
+pub fn jaumann_rotation_matrix_based(
+    del_t: f64,
+    velocity_gradient: &DVectorView<f64>,
+    stress: &mut DVectorViewMut<f64>,
+) {
+    let n = velocity_gradient.len() / 9;
+    let m = stress.len() / 6;
+    assert!(
+        n == m,
+        "Velocity gradient and stress must have the same number of elements"
+    );
+    for i in 0..n {
+        let vel_grad = velocity_gradient.fixed_view::<9, 1>(i * 9, 0);
+        let mut stress_view = stress.fixed_view_mut::<6, 1>(i * 6, 0);
+
+        // unsafe is okay because we index the fixed view of length 9. Bounds have been checked by fixed_view
+        let w_red: SVector<f64, 3> = unsafe {
+            vector![
+                0.5 * (*vel_grad.get_unchecked(1) - *vel_grad.get_unchecked(3)),
+                0.5 * (*vel_grad.get_unchecked(2) - *vel_grad.get_unchecked(6)),
+                0.5 * (*vel_grad.get_unchecked(5) - *vel_grad.get_unchecked(7))
+            ]
+        };
+
+        let stress_i = SVector::<f64, 6>::from_column_slice(stress_view.as_slice());
+        let b_matrix = jaumann_rotation_matrix(&stress_i);
+        stress_view.copy_from(&(stress_i + del_t * (b_matrix * w_red)));
+    }
+}
+
 pub fn jaumann_rotation_expensive(
     del_t: f64,
     velocity_gradient: &DVectorView<f64>,

@@ -1,4 +1,9 @@
-from comfe import jaumann_rotation, jaumann_rotation_expensive
+from comfe import (
+    jaumann_rotation,
+    jaumann_rotation_expensive,
+    jaumann_rotation_matrix,
+    jaumann_rotation_matrix_based,
+)
 import numpy as np
 
 
@@ -40,3 +45,27 @@ def test_jaumann_rotation():
     sigma = np.arange(6 * n, dtype=np.float64)
     jaumann_rotation(del_t, L, sigma)
     np.testing.assert_allclose(sigma, sigma_python)
+    sigma = np.arange(6 * n, dtype=np.float64)
+    jaumann_rotation_matrix_based(del_t, L, sigma)
+    np.testing.assert_allclose(sigma, sigma_python)
+
+
+def test_jaumann_rotation_matrix():
+    n = 42
+    sigma = np.arange(6 * n, dtype=np.float64).reshape(-1, 6)
+    for sigma_i in sigma:
+        x, y, z, w, a, b = sigma_i
+        sqrt2 = 2**0.5
+        B_expected = np.array(
+            [
+                [sqrt2 * b, sqrt2 * a, 0],
+                [-sqrt2 * b, 0, sqrt2 * w],
+                [0, -sqrt2 * a, -sqrt2 * w],
+                [-a, -b, sqrt2 * (z - y)],
+                [w, sqrt2 * (z - x), -b],
+                [sqrt2 * (y - x), w, a],
+            ]
+        )
+        B = np.zeros(18)
+        jaumann_rotation_matrix(sigma_i, B)
+        np.testing.assert_allclose(B.reshape(6, 3), B_expected)
