@@ -5,7 +5,9 @@ use strum_macros::{EnumIter, EnumString, ToString};
 
 use nalgebra::{Const, DVectorView, DVectorViewMut, Dyn, Matrix, SVector, ViewStorage, SMatrix};
 
-#[derive(Debug, EnumIter, Hash, PartialEq, Eq, EnumString, ToString)]
+// `Clone, Copy` so that a `Q` can be passed to several methods in a row (all variants are
+// fieldless, so this is purely additive).
+#[derive(Debug, Clone, Copy, EnumIter, Hash, PartialEq, Eq, EnumString, ToString)]
 pub enum Q {
     #[strum(serialize = "MandelStress", serialize = "mandel_stress")]
     MandelStress,
@@ -69,6 +71,16 @@ pub enum Q {
     StabilityEigenvalue,
     #[strum(serialize = "FlutterEigenvalue", serialize = "flutter_eigenvalue")]
     FlutterEigenvalue,
+    #[strum(
+        serialize = "FullSymbolStabilityEigenvalue",
+        serialize = "full_symbol_stability_eigenvalue"
+    )]
+    FullSymbolStabilityEigenvalue,
+    #[strum(
+        serialize = "FullSymbolFlutterEigenvalue",
+        serialize = "full_symbol_flutter_eigenvalue"
+    )]
+    FullSymbolFlutterEigenvalue,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -245,6 +257,11 @@ impl Q {
             // tensor; see drucker_prager.rs::critical_acoustic_eigenvalues.
             Q::StabilityEigenvalue => QDim::Vector(2),
             Q::FlutterEigenvalue => QDim::Vector(2),
+            // Same (Re, Im) convention, but for the full principal symbol which also
+            // includes the Jaumann-stress-rate contribution; see
+            // drucker_prager.rs::critical_full_symbol_eigenvalues.
+            Q::FullSymbolStabilityEigenvalue => QDim::Vector(2),
+            Q::FullSymbolFlutterEigenvalue => QDim::Vector(2),
             Q::_LAST => QDim::Scalar,
         }
     }
