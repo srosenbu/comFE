@@ -81,6 +81,16 @@ pub enum Q {
         serialize = "full_symbol_flutter_eigenvalue"
     )]
     FullSymbolFlutterEigenvalue,
+    #[strum(
+        serialize = "SymmetricStabilityEigenvalue",
+        serialize = "symmetric_stability_eigenvalue"
+    )]
+    SymmetricStabilityEigenvalue,
+    #[strum(
+        serialize = "FullSymbolSymmetricStabilityEigenvalue",
+        serialize = "full_symbol_symmetric_stability_eigenvalue"
+    )]
+    FullSymbolSymmetricStabilityEigenvalue,
     #[strum(serialize = "_LAST", serialize = "_last")]
     _LAST,
 }
@@ -262,6 +272,10 @@ impl Q {
             // drucker_prager.rs::critical_full_symbol_eigenvalues.
             Q::FullSymbolStabilityEigenvalue => QDim::Vector(2),
             Q::FullSymbolFlutterEigenvalue => QDim::Vector(2),
+            // Smallest eigenvalue of the symmetric part, i.e. the coercivity quantity
+            // `min_{|v|=1} v.Q(n)v`. Real by construction, hence a plain scalar.
+            Q::SymmetricStabilityEigenvalue => QDim::Scalar,
+            Q::FullSymbolSymmetricStabilityEigenvalue => QDim::Scalar,
             Q::_LAST => QDim::Scalar,
         }
     }

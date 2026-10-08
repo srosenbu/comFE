@@ -66,6 +66,13 @@ fn set_complex_output(output: &mut QValueOutput, q: Q, ip: usize, value: Complex
     }
 }
 
+/// As `set_complex_output`, but for the real-valued symmetric-part eigenvalues.
+fn set_scalar_output(output: &mut QValueOutput, q: Q, ip: usize, value: f64) {
+    if output.is_some(q) {
+        output.set_scalar(q, ip, value);
+    }
+}
+
 /// Reduces a set of (generally non-symmetric) 3x3 acoustic tensors to the eigenvalue with
 /// the smallest real part and the eigenvalue with the largest imaginary part, taken
 /// independently across all tensors and all 3 eigenvalues each (so the two may come from
@@ -73,12 +80,21 @@ fn set_complex_output(output: &mut QValueOutput, q: Q, ip: usize, value: Complex
 /// are generally non-symmetric, so eigenvalues can become complex, which signals loss of
 /// hyperbolicity (flutter instability) rather than the classical loss of ellipticity
 /// captured by a negative real eigenvalue.
+///
+/// The returned flutter eigenvalue is exactly `(0, 0)` when the whole spectrum is real,
+/// i.e. when there is no flutter. That falls out of seeding it at zero: the tensors are
+/// real, so complex eigenvalues can only occur in conjugate pairs, and whenever any pair
+/// exists one of its members has a strictly positive imaginary part and wins the
+/// comparison. Seeding at `-inf` instead would latch onto whichever real eigenvalue the
+/// solver happened to return first (nalgebra does not sort them) and report its arbitrary,
+/// typically positive real part as if it meant something. Note that the real part of the
+/// flutter eigenvalue is only meaningful when its imaginary part is nonzero.
 fn reduce_critical_eigenvalues<I>(acoustic_tensors: I) -> (Complex<f64>, Complex<f64>)
 where
     I: IntoIterator<Item = SMatrix<f64, 3, 3>>,
 {
     let mut min_re = Complex::new(f64::INFINITY, 0.0);
-    let mut max_im = Complex::new(0.0, f64::NEG_INFINITY);
+    let mut max_im = Complex::new(0.0, 0.0);
     for acoustic_tensor in acoustic_tensors {
         let eigenvalues = acoustic_tensor.complex_eigenvalues();
         for k in 0..3 {
@@ -94,26 +110,65 @@ where
     (min_re, max_im)
 }
 
-/// Critical eigenvalues of the classical acoustic tensor `P(n)^T * tangent * P(n)`, i.e.
-/// the symbol of the constitutive tangent alone, without the Jaumann stress rate.
-fn critical_acoustic_eigenvalues(
-    tangent: &SMatrix<f64, 6, 6>,
-    directions: &[SVector<f64, 3>],
-) -> (Complex<f64>, Complex<f64>) {
-    reduce_critical_eigenvalues(directions.iter().map(|n| {
-        let p = projection_matrix(*n);
-        p.transpose() * tangent * &p
-    }))
+/// Reduces a set of acoustic tensors to the smallest eigenvalue of their symmetric parts.
+/// This is the coercivity (Legendre-Hadamard) quantity `min_{|v|=1} v.Q(n)v`, since the
+/// antisymmetric part of `Q` drops out of the quadratic form identically.
+///
+/// For a *symmetric* `Q` -- which is what the major symmetry `C_ijkl = C_klij` of
+/// hyperelasticity or associated flow delivers -- positive definiteness is the hypothesis of
+/// the standard local well-posedness theorem for second-order quasilinear hyperbolic systems.
+/// It needs no strict hyperbolicity, because the energy `|u_t|^2 + <grad u, Q grad u>` is
+/// itself a Friedrichs symmetrizer; that matters since isotropic elasticity already has a
+/// degenerate shear root and so is not strictly hyperbolic.
+///
+/// For non-associated flow `Q` loses the major symmetry, `dE/dt = 0.5<(Q^T-Q) grad u, grad u_t>`
+/// no longer vanishes, and that term carries one more derivative than the energy controls --
+/// so the estimate cannot be closed and this quantity is an empirical indicator rather than
+/// a sufficient condition.
+fn reduce_min_symmetric_eigenvalue<I>(acoustic_tensors: I) -> f64
+where
+    I: IntoIterator<Item = SMatrix<f64, 3, 3>>,
+{
+    let mut min_eig = f64::INFINITY;
+    for acoustic_tensor in acoustic_tensors {
+        let eigenvalues = acoustic_tensor.symmetric_part().symmetric_eigenvalues();
+        min_eig = min_eig.min(eigenvalues.min());
+    }
+    min_eig
 }
 
-/// Critical eigenvalues of the full principal symbol
-/// `Q(n) = P(n)^T * T * [C * P(n) + B(sigma^n) * M(n)]`,
-/// which additionally accounts for the Jaumann stress rate. The return map sees the strain
-/// and the spin only through the single additive trial stress
+/// The classical acoustic tensor `P(n)^T * tangent * P(n)`, i.e. the symbol of the
+/// constitutive tangent alone, without the Jaumann stress rate.
+fn acoustic_tensor(tangent: &SMatrix<f64, 6, 6>, n: SVector<f64, 3>) -> SMatrix<f64, 3, 3> {
+    let p = projection_matrix(n);
+    p.transpose() * tangent * &p
+}
+
+/// The full principal symbol `Q(n) = P(n)^T * T * [C * P(n) + B(sigma^n) * M(n)]`, which
+/// additionally accounts for the Jaumann stress rate. The return map sees the strain and the
+/// spin only through the single additive trial stress
 /// `sigma^trial = C:del_eps + del_sigma^rot(W) + sigma^n`, so the algorithmic factor
 /// `T = d sigma^{n+1} / d sigma^trial` multiplies the rotational leg `B * M` just as it
 /// multiplies the constitutive leg `C * P`. In the elastic branch `T` is the identity.
 /// See theory/stress_rate.ipynb for the derivation and symbolic verification.
+fn full_symbol_tensor(
+    t_algorithmic: &SMatrix<f64, 6, 6>,
+    elastic_tangent: &SMatrix<f64, 6, 6>,
+    rotation_matrix: &SMatrix<f64, 6, 3>,
+    n: SVector<f64, 3>,
+) -> SMatrix<f64, 3, 3> {
+    let p = projection_matrix(n);
+    let m = spin_matrix(n);
+    p.transpose() * t_algorithmic * (elastic_tangent * &p + rotation_matrix * m)
+}
+
+fn critical_acoustic_eigenvalues(
+    tangent: &SMatrix<f64, 6, 6>,
+    directions: &[SVector<f64, 3>],
+) -> (Complex<f64>, Complex<f64>) {
+    reduce_critical_eigenvalues(directions.iter().map(|n| acoustic_tensor(tangent, *n)))
+}
+
 fn critical_full_symbol_eigenvalues(
     t_algorithmic: &SMatrix<f64, 6, 6>,
     elastic_tangent: &SMatrix<f64, 6, 6>,
@@ -121,9 +176,25 @@ fn critical_full_symbol_eigenvalues(
     directions: &[SVector<f64, 3>],
 ) -> (Complex<f64>, Complex<f64>) {
     reduce_critical_eigenvalues(directions.iter().map(|n| {
-        let p = projection_matrix(*n);
-        let m = spin_matrix(*n);
-        p.transpose() * t_algorithmic * (elastic_tangent * &p + rotation_matrix * m)
+        full_symbol_tensor(t_algorithmic, elastic_tangent, rotation_matrix, *n)
+    }))
+}
+
+fn min_symmetric_acoustic_eigenvalue(
+    tangent: &SMatrix<f64, 6, 6>,
+    directions: &[SVector<f64, 3>],
+) -> f64 {
+    reduce_min_symmetric_eigenvalue(directions.iter().map(|n| acoustic_tensor(tangent, *n)))
+}
+
+fn min_symmetric_full_symbol_eigenvalue(
+    t_algorithmic: &SMatrix<f64, 6, 6>,
+    elastic_tangent: &SMatrix<f64, 6, 6>,
+    rotation_matrix: &SMatrix<f64, 6, 3>,
+    directions: &[SVector<f64, 3>],
+) -> f64 {
+    reduce_min_symmetric_eigenvalue(directions.iter().map(|n| {
+        full_symbol_tensor(t_algorithmic, elastic_tangent, rotation_matrix, *n)
     }))
 }
 
@@ -669,14 +740,24 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             alpha_1 = alpha_0;
             damage_1 = self.model.damage();
             let directions = [SVector::<f64, 3>::new(n1, n2, n3)];
-            if output.is_some(Q::StabilityEigenvalue) || output.is_some(Q::FlutterEigenvalue) {
+            if output.is_some(Q::StabilityEigenvalue)
+                || output.is_some(Q::FlutterEigenvalue)
+                || output.is_some(Q::SymmetricStabilityEigenvalue)
+            {
                 let tangent = self.model.elastic_tangent().into_owned();
                 let (min_re, max_im) = critical_acoustic_eigenvalues(&tangent, &directions);
                 set_complex_output(output, Q::StabilityEigenvalue, ip, min_re);
                 set_complex_output(output, Q::FlutterEigenvalue, ip, max_im);
+                set_scalar_output(
+                    output,
+                    Q::SymmetricStabilityEigenvalue,
+                    ip,
+                    min_symmetric_acoustic_eigenvalue(&tangent, &directions),
+                );
             }
             if output.is_some(Q::FullSymbolStabilityEigenvalue)
                 || output.is_some(Q::FullSymbolFlutterEigenvalue)
+                || output.is_some(Q::FullSymbolSymmetricStabilityEigenvalue)
             {
                 // elastic branch: sigma^{n+1} == sigma^trial, hence T = I
                 let elastic_tangent = self.model.elastic_tangent().into_owned();
@@ -689,6 +770,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 );
                 set_complex_output(output, Q::FullSymbolStabilityEigenvalue, ip, min_re);
                 set_complex_output(output, Q::FullSymbolFlutterEigenvalue, ip, max_im);
+                set_scalar_output(
+                    output,
+                    Q::FullSymbolSymmetricStabilityEigenvalue,
+                    ip,
+                    min_symmetric_full_symbol_eigenvalue(
+                        &I_6,
+                        &elastic_tangent,
+                        &rotation_matrix,
+                        &directions,
+                    ),
+                );
             }
         } else {
             let mut del_lambda = 0.0;
@@ -822,8 +914,10 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
 
             if output.is_some(Q::StabilityEigenvalue)
                 || output.is_some(Q::FlutterEigenvalue)
+                || output.is_some(Q::SymmetricStabilityEigenvalue)
                 || output.is_some(Q::FullSymbolStabilityEigenvalue)
                 || output.is_some(Q::FullSymbolFlutterEigenvalue)
+                || output.is_some(Q::FullSymbolSymmetricStabilityEigenvalue)
             {
                 self.model.update_newton_matrix(&mut dres, del_lambda);
 
@@ -852,15 +946,23 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                 if let Some(directions) = directions {
                     if output.is_some(Q::StabilityEigenvalue)
                         || output.is_some(Q::FlutterEigenvalue)
+                        || output.is_some(Q::SymmetricStabilityEigenvalue)
                     {
                         let tangent = t_algorithmic * elastic_tangent;
                         let (min_re, max_im) =
                             critical_acoustic_eigenvalues(&tangent, &directions);
                         set_complex_output(output, Q::StabilityEigenvalue, ip, min_re);
                         set_complex_output(output, Q::FlutterEigenvalue, ip, max_im);
+                        set_scalar_output(
+                            output,
+                            Q::SymmetricStabilityEigenvalue,
+                            ip,
+                            min_symmetric_acoustic_eigenvalue(&tangent, &directions),
+                        );
                     }
                     if output.is_some(Q::FullSymbolStabilityEigenvalue)
                         || output.is_some(Q::FullSymbolFlutterEigenvalue)
+                        || output.is_some(Q::FullSymbolSymmetricStabilityEigenvalue)
                     {
                         let rotation_matrix = jaumann_rotation_matrix(&sigma_0);
                         let (min_re, max_im) = critical_full_symbol_eigenvalues(
@@ -871,6 +973,17 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
                         );
                         set_complex_output(output, Q::FullSymbolStabilityEigenvalue, ip, min_re);
                         set_complex_output(output, Q::FullSymbolFlutterEigenvalue, ip, max_im);
+                        set_scalar_output(
+                            output,
+                            Q::FullSymbolSymmetricStabilityEigenvalue,
+                            ip,
+                            min_symmetric_full_symbol_eigenvalue(
+                                &t_algorithmic,
+                                &elastic_tangent,
+                                &rotation_matrix,
+                                &directions,
+                            ),
+                        );
                     }
                 }
             }
@@ -989,6 +1102,8 @@ impl<MODEL: IsotropicHardeningPlasticity3D + Debug> ConstitutiveModel for Plasti
             (Q::FlutterEigenvalue, QDim::Vector(2)),
             (Q::FullSymbolStabilityEigenvalue, QDim::Vector(2)),
             (Q::FullSymbolFlutterEigenvalue, QDim::Vector(2)),
+            (Q::SymmetricStabilityEigenvalue, QDim::Scalar),
+            (Q::FullSymbolSymmetricStabilityEigenvalue, QDim::Scalar),
         ])
     }
     fn define_optional_history(&self) -> HashMap<Q, QDim> {
