@@ -88,6 +88,7 @@ class CDM3D(CDMSolver):
     distortion_expr: df.fem.Expression | None = None
     viscosity_evaluator: QuadratureEvaluator | None = None
     damping: float | None = None
+    update_mesh: bool = True
     # energy_form: df.fem.FormMetaClass | None = None
 
     class Config:
@@ -108,6 +109,7 @@ class CDM3D(CDMSolver):
         monitor_distortion: bool = False,
         cells: list[np.ndarray[np.int32]] | None = None,
         damping: float | None = None,
+        update_mesh: bool = True,
     ) -> None:
         # self.del_t = None
         v = df.fem.Function(function_space, name="Velocity")
@@ -207,6 +209,7 @@ class CDM3D(CDMSolver):
             distortion_expr=distortion_expr,
             viscosity_evaluator=viscosity_evaluator,
             damping=damping,
+            update_mesh=update_mesh,
         )
 
     def _as_3d_tensor(self, T: ufl.core.expr.Expr):
@@ -241,7 +244,8 @@ class CDM3D(CDMSolver):
         self.L_evaluator(L)
         # print(sigma.vector.array)
 
-        jaumann_rotation(h, L.vector.array, sigma.vector.array)
+        if self.update_mesh:
+            jaumann_rotation(h, L.vector.array, sigma.vector.array)
 
         # if self.nonlocal_var is not None:
         #    input_list[
@@ -290,7 +294,8 @@ class CDM3D(CDMSolver):
 
         du_half = (0.5 * self.del_t) * self.fields["v"].x.array
 
-        set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
+        if self.update_mesh:
+            set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
 
         # basically, evaluate the nonlocal variable here
         if intermediate_step is not None:
@@ -301,7 +306,8 @@ class CDM3D(CDMSolver):
         self.fields["u"].x.array[:] += 2.0 * du_half
         self.fields["u"].x.scatter_forward()
 
-        set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
+        if self.update_mesh:
+            set_mesh_coordinates(self.function_space.mesh, du_half, mode="add")
 
         if self.total_energy is not None:
             external_forces_0 = external_forces.vector.array.copy()
@@ -686,6 +692,7 @@ class CDMNonlocalMechanics(CDMSolver):
         nonlocal_initial_config: bool = True,
         cells: list[np.ndarray[np.int32]] | None = None,
         damping: float | None = None,
+        update_mesh: bool = True,
     ) -> None:
         if mass_mechanics is None:
             rho_space = df.fem.FunctionSpace(velocity_space.mesh, ("DG", 0))
@@ -719,9 +726,11 @@ class CDMNonlocalMechanics(CDMSolver):
             calculate_bulk_viscosity=calculate_bulk_viscosity,
             cells=cells,
             damping=damping,
+            update_mesh=update_mesh,
         )
 
-        displacements = mechanics_solver.fields["u"] if nonlocal_initial_config else None
+        # without mesh updates the mesh already is the initial configuration
+        displacements = mechanics_solver.fields["u"] if nonlocal_initial_config and update_mesh else None
         nonlocal_solver = nonlocal_solver(
             Q_local,
             Q_nonlocal_rate,
